@@ -1,0 +1,30 @@
+spring:
+  application:
+    name: qlc-stream-backend
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/qlc_stream}
+    username: ${DB_USER:qlc_stream}
+    password: ${DB_PASSWORD:qlc_stream_local}
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+  flyway:
+    enabled: true
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      probes:
+        enabled: true
+
+qlc-stream:
+  tmdb:
+    base-url: https://api.themoviedb.org/3
+    api-token: ${TMDB_API_TOKEN:}
+  storage:
+    media-root: ${MEDIA_ROOT:./data/media}

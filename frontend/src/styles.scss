@@ -1,0 +1,25 @@
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=Manrope:wght@600;700;800&display=swap');
+:root { --bg: #0e0e10; --surface: #19191c; --surface-strong: #222226; --line: #2a2a2f; --ink: #f1efe9; --muted: #a5a2a0; --quiet: #716f70; --accent: #e9a84b; --display: 'Manrope', sans-serif; --body: 'DM Sans', sans-serif; color-scheme: dark; font-family: var(--body); background: var(--bg); color: var(--ink); }
+* { box-sizing: border-box; }
+html { background: var(--bg); }
+body { margin: 0; min-width: 320px; min-height: 100vh; background: radial-gradient(circle at 85% 0%, rgba(233, 168, 75, .08), transparent 28rem), var(--bg); }
+button, input { font: inherit; }
+button { cursor: pointer; }
+.page { max-width: 1440px; margin: 0 auto; padding: 52px clamp(24px, 5vw, 72px) 80px; }
+.eyebrow { margin: 0 0 12px; color: var(--accent); font-size: 11px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; }
+.page h1 { max-width: 760px; margin: 0; font: 700 clamp(34px, 5vw, 62px)/1.02 var(--display); letter-spacing: -.055em; }
+.lede { max-width: 660px; margin: 18px 0 34px; color: var(--muted); font-size: 16px; line-height: 1.65; }
+.toolbar { display: flex; gap: 12px; margin-bottom: 38px; }
+.search { width: min(560px, 100%); height: 48px; padding: 0 18px; color: var(--ink); border: 1px solid var(--line); border-radius: 12px; outline: none; background: var(--surface); }
+.search:focus { border-color: var(--accent); }
+.primary { min-height: 46px; padding: 0 18px; border: 0; border-radius: 11px; background: var(--accent); color: #17120b; font-weight: 700; }
+.section-title { margin: 0 0 18px; font: 650 18px/1.2 var(--display); }
+.empty-panel { padding: clamp(26px, 5vw, 52px); border: 1px solid var(--line); border-radius: 18px; background: rgba(25, 25, 28, .72); }
+.empty-panel strong { display: block; margin-bottom: 8px; font: 650 18px/1.3 var(--display); }
+.empty-panel p { max-width: 580px; margin: 0; color: var(--muted); line-height: 1.6; }
+.stat-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; overflow: hidden; border: 1px solid var(--line); border-radius: 16px; background: var(--line); }
+.stat { padding: 24px; background: var(--surface); }
+.stat span, .stat strong { display: block; }
+.stat span { margin-bottom: 12px; color: var(--muted); font-size: 12px; }
+.stat strong { font: 700 30px/1 var(--display); letter-spacing: -.04em; }
+@media (max-width: 680px) { .page { padding: 32px 20px 56px; } .toolbar { align-items: stretch; flex-direction: column; } .stat-grid { grid-template-columns: 1fr; } }

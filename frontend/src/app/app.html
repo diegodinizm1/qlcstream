@@ -1,0 +1,19 @@
+<div class="app-shell">
+  <aside class="sidebar">
+    <a class="brand" routerLink="/catalog" aria-label="QLC Stream">
+      <span class="brand-mark">Q</span>
+      <span><strong>QLC Stream</strong><small>Biblioteca local</small></span>
+    </a>
+    <nav aria-label="Navegação principal">
+      <a routerLink="/catalog" routerLinkActive="active"><span>Catálogo</span><small>Explorar</small></a>
+      <a routerLink="/downloads" routerLinkActive="active"><span>Downloads</span><small>0 ativos</small></a>
+      <a routerLink="/library" routerLinkActive="active"><span>Biblioteca</span><small>Arquivos locais</small></a>
+      <a routerLink="/settings" routerLinkActive="active"><span>Configurações</span><small>Integrações</small></a>
+    </nav>
+    <div class="local-status">
+      <span class="status-dot"></span>
+      <div><strong>Modo local</strong><small>Seus arquivos ficam aqui</small></div>
+    </div>
+  </aside>
+  <main><router-outlet /></main>
+</div>

@@ -1,0 +1,9 @@
+.DS_Store
+.env
+.idea/
+.vscode/
+data/
+backend/target/
+frontend/.angular/
+frontend/dist/
+frontend/node_modules/
