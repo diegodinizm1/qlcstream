@@ -127,6 +127,7 @@ export class CatalogPage {
   private readonly router = inject(Router);
   private activeRequest?: Subscription;
   private spotlightTimer?: ReturnType<typeof setInterval>;
+  private requestVersion = 0;
   private readonly queryChanges = new Subject<string>();
 
   readonly filters: ReadonlyArray<{ collection: CatalogCollection; label: string }> = [
@@ -150,6 +151,7 @@ export class CatalogPage {
   readonly currentPage = signal(1);
   readonly loadingMoreMovies = signal(false);
   readonly hasMoreMovies = signal(true);
+  readonly sortTouched = signal(false);
   readonly sortBy = signal<'POPULARITY' | 'RATING' | 'NEWEST' | 'OLDEST' | 'TITLE'>('POPULARITY');
   readonly spotlightIndex = signal(0);
   readonly spotlightCycle = signal(0);
@@ -167,6 +169,7 @@ export class CatalogPage {
   readonly spotlightMovie = computed(() => this.spotlightItems()[this.activeSpotlightIndex()] ?? this.movies()[0]);
   readonly displayedMovies = computed(() => {
     const movies = [...this.movies()];
+    if (!this.sortTouched()) return movies;
     switch (this.sortBy()) {
       case 'RATING': return movies.sort((a, b) => (b.voteAverage ?? -1) - (a.voteAverage ?? -1));
       case 'NEWEST': return movies.sort((a, b) => (b.releaseDate ?? '').localeCompare(a.releaseDate ?? ''));
@@ -286,6 +289,7 @@ export class CatalogPage {
   loadMore(): void {
     if (this.loadingMoreMovies() || !this.hasMoreMovies()) return;
     const nextPage = this.currentPage() + 1;
+    const requestVersion = this.requestVersion;
     const query = this.lastSubmittedQuery();
     const request = query
       ? this.catalogApi.search(query, 'pt-BR', nextPage)
@@ -293,12 +297,18 @@ export class CatalogPage {
     this.loadingMoreMovies.set(true);
     request.pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
       next: (movies) => {
-        this.movies.update((current) => [...current, ...movies]);
+        if (requestVersion !== this.requestVersion) return;
+        this.movies.update((current) => {
+          const existingIds = new Set(current.map((item) => item.tmdbId));
+          return [...current, ...movies.filter((item) => !existingIds.has(item.tmdbId))];
+        });
         this.currentPage.set(nextPage);
         this.hasMoreMovies.set(movies.length >= 20);
         this.loadingMoreMovies.set(false);
       },
-      error: () => this.loadingMoreMovies.set(false),
+      error: () => {
+        if (requestVersion === this.requestVersion) this.loadingMoreMovies.set(false);
+      },
     });
   }
 
@@ -315,6 +325,7 @@ export class CatalogPage {
   }
 
   setSort(event: Event): void {
+    this.sortTouched.set(true);
     this.sortBy.set((event.target as HTMLSelectElement).value as typeof this.sortBy extends () => infer T ? T : never);
   }
 
@@ -346,17 +357,20 @@ export class CatalogPage {
   }
 
   private load(request: Observable<CatalogMovie[]>): void {
+    const requestVersion = ++this.requestVersion;
     this.activeRequest?.unsubscribe();
     this.viewState.set('loading');
     this.configurationMissing.set(false);
     this.unavailablePosterIds.set(new Set());
     this.activeRequest = request.pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
       next: (movies) => {
-        this.movies.set(movies);
+        if (requestVersion !== this.requestVersion) return;
+        this.movies.set(this.uniqueMovies(movies));
         this.spotlightIndex.set(0);
         this.currentPage.set(1);
         this.hasMoreMovies.set(movies.length >= 20);
         this.loadingMoreMovies.set(false);
+        this.sortTouched.set(false);
         this.resetSpotlightTimer();
         this.viewState.set('ready');
         this.libraryApi.movieIds().pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
@@ -365,11 +379,17 @@ export class CatalogPage {
         this.libraryApi.favorites().pipe(takeUntilDestroyed(this.destroyRef)).subscribe({ next: (items) => this.favoriteMovieIds.set(new Set(items.filter((item) => item.mediaType === 'MOVIE').map((item) => item.tmdbId))) });
       },
       error: (error: unknown) => {
+        if (requestVersion !== this.requestVersion) return;
         this.movies.set([]);
         this.describeError(error);
         this.viewState.set('error');
       },
     });
+  }
+
+  private uniqueMovies(values: CatalogMovie[]): CatalogMovie[] {
+    const seen = new Set<number>();
+    return values.filter((item) => !seen.has(item.tmdbId) && seen.add(item.tmdbId));
   }
 
   private describeError(error: unknown): void {
