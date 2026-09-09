@@ -41,6 +41,10 @@ public class QbittorrentDownloadSynchronizer {
                         torrent.downloadSpeedBps(), torrent.eta(), status);
                 if (status.equals("SEEDING") || status.equals("COMPLETED")) {
                     library.registerCompletedDownload(download.movieId(), download.id(), download.relativeDirectory());
+                    if (!library.hasPresentVideo(download.id())) {
+                        qbittorrent.remove(torrent.hash());
+                        download.markRemoved();
+                    }
                 }
             }
         }

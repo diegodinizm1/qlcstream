@@ -142,4 +142,10 @@ public class DownloadRow {
         updatedAt = Instant.now();
         lastSyncedAt = updatedAt;
     }
+
+    public void markRemoved() {
+        status = "REMOVED";
+        updatedAt = Instant.now();
+        lastSyncedAt = updatedAt;
+    }
 }

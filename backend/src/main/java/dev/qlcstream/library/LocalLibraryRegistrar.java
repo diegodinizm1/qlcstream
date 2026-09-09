@@ -29,6 +29,15 @@ public class LocalLibraryRegistrar {
         }
     }
 
+    public boolean hasPresentVideo(UUID downloadId) {
+        return Boolean.TRUE.equals(jdbc.queryForObject("""
+                SELECT EXISTS (
+                    SELECT 1 FROM local_file
+                    WHERE download_id = ? AND file_kind = 'VIDEO' AND availability = 'PRESENT'
+                )
+                """, Boolean.class, downloadId));
+    }
+
     private boolean isVideo(Path file) {
         var name = file.getFileName().toString();
         var dot = name.lastIndexOf('.');

@@ -58,6 +58,22 @@ public class QbittorrentClient {
         }
     }
 
+    public void remove(String hash) {
+        if (hash == null || hash.isBlank()) return;
+        if (!properties.configured()) throw new QbittorrentUnavailableException("qBittorrent não está configurado.");
+        try {
+            var response = post(authenticatedClient(), "/api/v2/torrents/delete", Map.of("hashes", hash, "deleteFiles", "false"));
+            if (response.statusCode() < 200 || response.statusCode() >= 300) {
+                throw new QbittorrentUnavailableException("Não foi possível remover o torrent do qBittorrent.");
+            }
+        } catch (IOException exception) {
+            throw new QbittorrentUnavailableException("Não foi possível alcançar o qBittorrent.", exception);
+        } catch (InterruptedException exception) {
+            Thread.currentThread().interrupt();
+            throw new QbittorrentUnavailableException("A comunicação com o qBittorrent foi interrompida.", exception);
+        }
+    }
+
     private HttpClient authenticatedClient() throws IOException, InterruptedException {
         var client = HttpClient.newBuilder().cookieHandler(new CookieManager(null, CookiePolicy.ACCEPT_ALL))
                 .connectTimeout(Duration.ofSeconds(5)).build();
