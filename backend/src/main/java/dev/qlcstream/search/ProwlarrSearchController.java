@@ -54,9 +54,9 @@ public class ProwlarrSearchController {
     }
 
     record ProwlarrRelease(String title, String protocol, String indexer, Long size, Integer seeders, Integer leechers,
-            String downloadUrl, String infoUrl, Instant publishDate) { }
+            String downloadUrl, String magnetUrl, String infoUrl, Instant publishDate) { }
     record ReleaseResponse(String title, String protocol, String indexer, Long size, Integer seeders, Integer leechers,
-            String downloadUrl, String infoUrl, Instant publishDate) {
-        static ReleaseResponse from(ProwlarrRelease release) { return new ReleaseResponse(release.title(), release.protocol(), release.indexer(), release.size(), release.seeders(), release.leechers(), release.downloadUrl(), release.infoUrl(), release.publishDate()); }
+            String downloadUrl, String magnetUrl, String infoUrl, Instant publishDate) {
+        static ReleaseResponse from(ProwlarrRelease release) { return new ReleaseResponse(release.title(), release.protocol(), release.indexer(), release.size(), release.seeders(), release.leechers(), release.downloadUrl(), release.magnetUrl(), release.infoUrl(), release.publishDate()); }
     }
 }
