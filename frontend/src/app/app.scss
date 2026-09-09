@@ -3,11 +3,7 @@
 .topbar { position: sticky; top: 0; z-index: 20; height: 60px; border-bottom: 1px solid var(--line); background: color-mix(in srgb, var(--header) 92%, transparent); backdrop-filter: blur(14px); }
 .topbar-inner { width: min(100% - 32px, 1220px); height: 100%; margin: 0 auto; display: grid; grid-template-columns: auto auto minmax(220px, 420px) auto; align-items: center; gap: clamp(20px, 4vw, 48px); }
 .brand { display: flex; align-items: center; color: var(--text); text-decoration: none; letter-spacing: -.04em; }
-.brand-mark { display: flex; gap: 3px; align-items: flex-end; width: 28px; height: 28px; margin-right: 9px; padding: 5px; border-radius: var(--radius-sm); background: var(--accent); }
-.brand-mark i { display: block; width: 4px; border-radius: 1px; background: #06251f; }
-.brand-mark i:nth-child(1) { height: 10px; }
-.brand-mark i:nth-child(2) { height: 17px; }
-.brand-mark i:nth-child(3) { height: 13px; }
+.brand-mark { width: 28px; height: 28px; margin-right: 9px; border-radius: var(--radius-sm); }
 .brand-name { font-size: 18px; font-weight: 800; }
 .brand-suffix { margin-left: 3px; color: var(--muted); font-size: 16px; font-weight: 500; }
 nav:not(.mobile-nav) { display: flex; align-items: stretch; height: 100%; gap: 28px; }
