@@ -50,8 +50,12 @@ export class DownloadsPage {
   posterUrl(download: DownloadSummary): string { return `https://image.tmdb.org/t/p/w185${download.posterPath}`; }
   percent(progress: number): string { return `${Math.round(progress * 100)}%`; }
   quality(download: DownloadSummary): string { return [download.resolutionHeight ? `${download.resolutionHeight}p` : null, download.sourceType, download.dynamicRange].filter(Boolean).join(' · ') || 'Qualidade não informada'; }
-  status(status: string): string { return ({ REQUESTED: 'Preparando', SUBMITTING: 'Enviando', METADATA: 'Lendo metadados', QUEUED: 'Na fila', DOWNLOADING: 'Baixando', PAUSED: 'Pausado', STALLED: 'Sem conexão', CHECKING: 'Verificando', ERROR: 'Erro' } as Record<string, string>)[status] ?? status; }
-  transferMeta(download: DownloadSummary): string { return [download.downloadSpeedBps ? `${this.formatBytes(download.downloadSpeedBps)}/s` : null, download.etaSeconds ? `restam ${this.formatEta(download.etaSeconds)}` : null].filter(Boolean).join(' · ') || 'Aguardando atualização'; }
+  status(status: string): string { return ({ REQUESTED: 'Preparando', SUBMITTING: 'Enviando', METADATA: 'Lendo metadados', QUEUED: 'Na fila', DOWNLOADING: 'Baixando', PAUSED: 'Pausado', STALLED: 'Sem conexão', CHECKING: 'Verificando', SEEDING: 'Compartilhando', COMPLETED: 'Concluído', ERROR: 'Erro' } as Record<string, string>)[status] ?? status; }
+  transferMeta(download: DownloadSummary): string {
+    if (download.status === 'SEEDING') return 'Concluído e compartilhando';
+    if (download.status === 'COMPLETED') return 'Concluído';
+    return [download.downloadSpeedBps ? `${this.formatBytes(download.downloadSpeedBps)}/s` : null, download.etaSeconds ? `restam ${this.formatEta(download.etaSeconds)}` : null].filter(Boolean).join(' · ') || 'Aguardando atualização';
+  }
   private formatBytes(bytes: number): string { return bytes >= 1_000_000_000 ? `${(bytes / 1_000_000_000).toFixed(1)} GB` : `${Math.max(1, Math.round(bytes / 1_000_000))} MB`; }
   private formatEta(seconds: number): string { return seconds >= 3600 ? `${Math.ceil(seconds / 3600)}h` : `${Math.max(1, Math.ceil(seconds / 60))}min`; }
 }
