@@ -11,9 +11,14 @@ import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.Map;
+import java.util.List;
+import java.util.ArrayList;
 import java.util.stream.Collectors;
 
 import org.springframework.stereotype.Component;
+
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 
 import dev.qlcstream.downloads.config.DownloadQbittorrentProperties;
 
@@ -21,9 +26,46 @@ import dev.qlcstream.downloads.config.DownloadQbittorrentProperties;
 public class QbittorrentClient {
 
     private final DownloadQbittorrentProperties properties;
+    private final ObjectMapper objectMapper;
 
-    public QbittorrentClient(DownloadQbittorrentProperties properties) {
+    public QbittorrentClient(DownloadQbittorrentProperties properties, ObjectMapper objectMapper) {
         this.properties = properties;
+        this.objectMapper = objectMapper;
+    }
+
+    public List<TorrentSnapshot> torrents() {
+        if (!properties.configured()) return List.of();
+        try {
+            var client = authenticatedClient();
+            var request = HttpRequest.newBuilder(URI.create(properties.baseUrl() + "/api/v2/torrents/info"))
+                    .timeout(Duration.ofSeconds(15)).GET().build();
+            var response = client.send(request, HttpResponse.BodyHandlers.ofString());
+            if (response.statusCode() < 200 || response.statusCode() >= 300) {
+                throw new QbittorrentUnavailableException("Não foi possível consultar o qBittorrent.");
+            }
+            var snapshots = new ArrayList<TorrentSnapshot>();
+            for (JsonNode torrent : objectMapper.readTree(response.body())) {
+                snapshots.add(new TorrentSnapshot(torrent.path("hash").asString(), torrent.path("state").asString(),
+                        torrent.path("progress").asDouble(), torrent.path("size").asLong(), torrent.path("downloaded").asLong(),
+                        torrent.path("dlspeed").asLong(), torrent.path("eta").asLong(), torrent.path("save_path").asString()));
+            }
+            return snapshots;
+        } catch (IOException exception) {
+            throw new QbittorrentUnavailableException("Não foi possível alcançar o qBittorrent.", exception);
+        } catch (InterruptedException exception) {
+            Thread.currentThread().interrupt();
+            throw new QbittorrentUnavailableException("A comunicação com o qBittorrent foi interrompida.", exception);
+        }
+    }
+
+    private HttpClient authenticatedClient() throws IOException, InterruptedException {
+        var client = HttpClient.newBuilder().cookieHandler(new CookieManager(null, CookiePolicy.ACCEPT_ALL))
+                .connectTimeout(Duration.ofSeconds(5)).build();
+        var login = post(client, "/api/v2/auth/login", Map.of("username", properties.username(), "password", properties.password()));
+        if (login.statusCode() < 200 || login.statusCode() >= 300) {
+            throw new QbittorrentUnavailableException("Não foi possível autenticar no qBittorrent.");
+        }
+        return client;
     }
 
     public void add(String acquisitionRef, String savePath) {
@@ -68,5 +110,9 @@ public class QbittorrentClient {
         QbittorrentUnavailableException(String message, Throwable cause) {
             super(message, cause);
         }
+    }
+
+    public record TorrentSnapshot(String hash, String state, double progress, long size, long downloaded,
+            long downloadSpeedBps, long eta, String savePath) {
     }
 }

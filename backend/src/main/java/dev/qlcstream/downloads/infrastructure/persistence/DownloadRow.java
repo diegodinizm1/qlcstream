@@ -27,6 +27,12 @@ public class DownloadRow {
     @Column(nullable = false)
     private String engine;
 
+    @Column(name = "external_id")
+    private String externalId;
+
+    @Column(name = "info_hash")
+    private String infoHash;
+
     @Column(name = "indexer_name")
     private String indexerName;
 
@@ -51,14 +57,23 @@ public class DownloadRow {
     @Column(nullable = false)
     private String status;
 
+    @Column(name = "engine_state")
+    private String engineState;
+
     @Column(precision = 6, scale = 5, nullable = false)
     private BigDecimal progress;
+
+    @Column(name = "total_bytes")
+    private Long totalBytes;
 
     @Column(name = "downloaded_bytes", nullable = false)
     private long downloadedBytes;
 
     @Column(name = "download_speed_bps", nullable = false)
     private long downloadSpeedBps;
+
+    @Column(name = "eta_seconds")
+    private Long etaSeconds;
 
     @Column(name = "attempt_count", nullable = false)
     private int attemptCount;
@@ -68,6 +83,9 @@ public class DownloadRow {
 
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
+
+    @Column(name = "last_synced_at")
+    private Instant lastSyncedAt;
 
     protected DownloadRow() {
     }
@@ -96,5 +114,24 @@ public class DownloadRow {
         row.createdAt = now;
         row.updatedAt = now;
         return row;
+    }
+
+    public String relativeDirectory() {
+        return relativeDirectory;
+    }
+
+    public void synchronize(String hash, String state, double currentProgress, long size, long downloaded, long downloadSpeed,
+            long eta, String normalizedStatus) {
+        externalId = hash;
+        infoHash = hash;
+        engineState = state;
+        progress = BigDecimal.valueOf(currentProgress).setScale(5, java.math.RoundingMode.HALF_UP);
+        totalBytes = size;
+        downloadedBytes = downloaded;
+        downloadSpeedBps = downloadSpeed;
+        etaSeconds = eta >= 8_640_000 ? null : eta;
+        status = normalizedStatus;
+        updatedAt = Instant.now();
+        lastSyncedAt = updatedAt;
     }
 }

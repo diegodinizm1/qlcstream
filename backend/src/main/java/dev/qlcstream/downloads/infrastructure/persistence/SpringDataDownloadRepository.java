@@ -2,6 +2,7 @@ package dev.qlcstream.downloads.infrastructure.persistence;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Collection;
 import java.util.UUID;
 
 import org.springframework.data.jpa.repository.Query;
@@ -12,12 +13,14 @@ public interface SpringDataDownloadRepository extends CrudRepository<DownloadRow
     @Query(value = "SELECT id FROM movie WHERE tmdb_id = :tmdbId", nativeQuery = true)
     Long findMovieIdByTmdbId(long tmdbId);
 
+    List<DownloadRow> findByStatusNotIn(Collection<String> statuses);
+
     @Query(value = """
             SELECT d.id, m.tmdb_id AS movie_tmdb_id, m.title AS movie_title, m.poster_path,
                    d.release_title, d.resolution_height, d.source_type, d.dynamic_range, d.status,
                    d.progress, d.total_bytes, d.downloaded_bytes, d.download_speed_bps, d.eta_seconds, d.created_at
             FROM download d JOIN movie m ON m.id = d.movie_id
-            WHERE d.status NOT IN ('COMPLETED', 'SEEDING', 'CANCELED', 'REMOVED')
+            WHERE d.status NOT IN ('COMPLETED', 'CANCELED', 'REMOVED')
             ORDER BY d.created_at DESC
             """, nativeQuery = true)
     List<DownloadProjection> findActive();
