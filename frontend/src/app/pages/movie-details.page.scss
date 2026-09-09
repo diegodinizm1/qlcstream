@@ -33,5 +33,14 @@
 .details-error > i { color: var(--danger); }
 .details-error strong { display: block; color: var(--text); }
 .details-error p { margin: 7px 0 18px; }
+
+:host-context(.app-shell[data-theme='light']) .detail-kicker {
+  color: #f7fbfa;
+  text-shadow: 0 1px 3px rgba(8, 21, 24, .72);
+}
+
+:host-context(.app-shell[data-theme='light']) .detail-kicker span {
+  border-color: rgba(247, 251, 250, .58);
+}
 @media (max-width: 700px) { .details-hero, .details-hero-content { min-height: 230px; } .details-content { margin-top: -56px; } .details-layout { grid-template-columns: 120px minmax(0, 1fr); gap: 20px; } .details-copy { padding-top: 20px; } .details-copy h1 { font-size: clamp(34px, 10vw, 50px); } .tagline { font-size: 16px; } }
 @media (max-width: 480px) { .details-layout { grid-template-columns: 92px minmax(0, 1fr); gap: 16px; } .details-copy { padding-top: 0; } .detail-kicker { font-size: 10px; } .details-copy h1 { font-size: 34px; } .original-title { font-size: 12px; } .overview { margin-top: 26px; } }
