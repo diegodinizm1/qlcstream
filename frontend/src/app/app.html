@@ -1,5 +1,5 @@
 <div class="app-shell" [class.desktop-window]="desktop()" [attr.data-theme]="theme()">
-  <header class="topbar">
+  <header class="topbar" (mousedown)="startWindowDrag($event)">
     <div class="topbar-inner">
       <a class="brand" routerLink="/catalog" aria-label="QLC Stream">
         <img class="brand-mark" src="qlc-mark.svg" alt="" />
@@ -48,6 +48,13 @@
         <a class="settings-link" routerLink="/settings" routerLinkActive="active" aria-label="Configurações"><i class="ph ph-gear-six" aria-hidden="true"></i></a>
       </div>
     </div>
+    @if (desktop()) {
+      <div class="window-controls" aria-label="Controles da janela">
+        <button type="button" class="window-control" aria-label="Minimizar" (click)="$event.stopPropagation(); minimizeWindow()"><i class="ph ph-minus"></i></button>
+        <button type="button" class="window-control" [attr.aria-label]="maximized() ? 'Restaurar' : 'Maximizar'" (click)="$event.stopPropagation(); toggleMaximize()"><i class="ph" [class.ph-square]="!maximized()" [class.ph-corners-out]="maximized()"></i></button>
+        <button type="button" class="window-control close" aria-label="Fechar" (click)="$event.stopPropagation(); closeWindow()"><i class="ph ph-x"></i></button>
+      </div>
+    }
   </header>
 
   <main><router-outlet /></main>

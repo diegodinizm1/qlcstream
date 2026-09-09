@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, DestroyRef, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
+import { getCurrentWindow } from '@tauri-apps/api/window';
 import { Subject, catchError, debounceTime, distinctUntilChanged, forkJoin, of, switchMap } from 'rxjs';
 
 import { CatalogApiService, CatalogMovie, CatalogPerson, CatalogSeries } from './core/catalog-api.service';
@@ -24,6 +25,7 @@ export class App {
 
   readonly globalQuery = signal('');
   readonly desktop = signal(isDesktopApp());
+  readonly maximized = signal(false);
   readonly suggestions = signal<CatalogMovie[]>([]);
   readonly peopleSuggestions = signal<CatalogPerson[]>([]);
   readonly seriesSuggestions = signal<CatalogSeries[]>([]);
@@ -36,6 +38,9 @@ export class App {
   );
 
   constructor() {
+    if (this.desktop()) {
+      void getCurrentWindow().isMaximized().then((value) => this.maximized.set(value));
+    }
     this.downloadNotifications.start();
     this.route.queryParamMap.pipe(takeUntilDestroyed(this.destroyRef)).subscribe((params) => {
       this.globalQuery.set(params.get('q') ?? '');
@@ -131,5 +136,32 @@ export class App {
     const query = this.globalQuery().trim();
     this.autocompleteOpen.set(false);
     void this.router.navigate(['/catalog'], { queryParams: { q: query || null } });
+  }
+
+  async minimizeWindow(): Promise<void> {
+    if (this.desktop()) await getCurrentWindow().minimize();
+  }
+
+  async toggleMaximize(): Promise<void> {
+    if (!this.desktop()) return;
+    const currentWindow = getCurrentWindow();
+    if (await currentWindow.isMaximized()) {
+      await currentWindow.unmaximize();
+      this.maximized.set(false);
+    } else {
+      await currentWindow.maximize();
+      this.maximized.set(true);
+    }
+  }
+
+  async closeWindow(): Promise<void> {
+    if (this.desktop()) await getCurrentWindow().close();
+  }
+
+  async startWindowDrag(event: MouseEvent): Promise<void> {
+    if (!this.desktop() || event.button !== 0) return;
+    const target = event.target;
+    if (target instanceof Element && target.closest('button, a, input, select, textarea')) return;
+    await getCurrentWindow().startDragging();
   }
 }

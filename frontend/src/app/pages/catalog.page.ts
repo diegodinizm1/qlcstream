@@ -100,6 +100,13 @@ import { LibraryApiService } from '../core/library-api.service';
                   </article>
                 }
               </div>
+              @if (hasMoreMovies()) {
+                <div class="load-more-actions">
+                  <button class="btn btn-quiet" type="button" [disabled]="loadingMoreMovies()" (click)="loadMore()">
+                    {{ loadingMoreMovies() ? 'Carregando filmes…' : 'Carregar mais filmes' }}
+                  </button>
+                </div>
+              }
             } @else {
               <div class="state-message empty-state">
                 <i class="ph ph-film-strip"></i><div><strong>Nenhum filme encontrado.</strong><p>Tente outro título ou limpe a busca.</p></div>
@@ -140,6 +147,9 @@ export class CatalogPage {
   readonly addingMovieIds = signal<ReadonlySet<number>>(new Set());
   readonly addedMovieIds = signal<ReadonlySet<number>>(new Set());
   readonly favoriteMovieIds = signal<ReadonlySet<number>>(new Set());
+  readonly currentPage = signal(1);
+  readonly loadingMoreMovies = signal(false);
+  readonly hasMoreMovies = signal(true);
   readonly sortBy = signal<'POPULARITY' | 'RATING' | 'NEWEST' | 'OLDEST' | 'TITLE'>('POPULARITY');
   readonly spotlightIndex = signal(0);
   readonly spotlightCycle = signal(0);
@@ -273,6 +283,25 @@ export class CatalogPage {
     this.resetSpotlightTimer();
   }
 
+  loadMore(): void {
+    if (this.loadingMoreMovies() || !this.hasMoreMovies()) return;
+    const nextPage = this.currentPage() + 1;
+    const query = this.lastSubmittedQuery();
+    const request = query
+      ? this.catalogApi.search(query, 'pt-BR', nextPage)
+      : this.catalogApi.discover(this.activeFilter(), 'pt-BR', nextPage);
+    this.loadingMoreMovies.set(true);
+    request.pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
+      next: (movies) => {
+        this.movies.update((current) => [...current, ...movies]);
+        this.currentPage.set(nextPage);
+        this.hasMoreMovies.set(movies.length >= 20);
+        this.loadingMoreMovies.set(false);
+      },
+      error: () => this.loadingMoreMovies.set(false),
+    });
+  }
+
   hidePoster(movie: CatalogMovie): void {
     this.unavailablePosterIds.update((ids) => new Set(ids).add(movie.tmdbId));
   }
@@ -325,6 +354,9 @@ export class CatalogPage {
       next: (movies) => {
         this.movies.set(movies);
         this.spotlightIndex.set(0);
+        this.currentPage.set(1);
+        this.hasMoreMovies.set(movies.length >= 20);
+        this.loadingMoreMovies.set(false);
         this.resetSpotlightTimer();
         this.viewState.set('ready');
         this.libraryApi.movieIds().pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
