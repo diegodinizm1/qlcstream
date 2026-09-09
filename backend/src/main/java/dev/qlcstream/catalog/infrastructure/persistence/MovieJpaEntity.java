@@ -41,6 +41,9 @@ class MovieJpaEntity {
     @Column(name = "poster_path")
     private String posterPath;
 
+    @Column(name = "backdrop_path")
+    private String backdropPath;
+
     @Column(name = "vote_average")
     private BigDecimal voteAverage;
 
@@ -63,12 +66,14 @@ class MovieJpaEntity {
         releaseDate = movie.releaseDate();
         overview = movie.overview();
         posterPath = movie.posterPath();
+        backdropPath = movie.backdropPath();
         voteAverage = movie.voteAverage();
         metadataUpdatedAt = Instant.now();
         tmdbId = movie.tmdbId();
     }
 
     Movie toDomain() {
-        return new Movie(id, tmdbId, imdbId, title, originalTitle, releaseDate, overview, posterPath, voteAverage);
+        return new Movie(id, tmdbId, imdbId, title, originalTitle, releaseDate, overview, posterPath, backdropPath,
+                voteAverage);
     }
 }

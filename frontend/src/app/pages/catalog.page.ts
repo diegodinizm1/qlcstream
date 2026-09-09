@@ -12,19 +12,18 @@ import { CatalogApiService, CatalogMovie } from '../core/catalog-api.service';
   imports: [RouterLink],
   styleUrl: './catalog.page.scss',
   template: `
-    <section class="spotlight" aria-labelledby="spotlight-title">
-      <img src="/posters/deep-water.png" alt="Cidade costeira sob chuva durante a noite" />
-      <div class="spotlight-shade"></div>
-      <div class="spotlight-content">
-        <h1 id="spotlight-title">Maré profunda</h1>
-        <p class="movie-meta">2026 <span>Ficção científica</span> <span>2h 14min</span></p>
-        <p class="spotlight-copy">Uma cartógrafa encontra uma cidade que desaparece do mapa a cada amanhecer.</p>
-        <div class="spotlight-actions">
-          <button class="btn btn-primary" type="button"><i class="ph ph-magnifying-glass"></i>Encontrar arquivo</button>
-          <button class="btn btn-secondary" type="button"><i class="ph ph-info"></i>Detalhes</button>
+    @if (spotlightMovie(); as movie) {
+      <section class="spotlight" aria-labelledby="spotlight-title">
+        @if (movie.backdropPath) { <img [src]="backdropUrl(movie)" [alt]="'Cena de ' + movie.title" /> }
+        <div class="spotlight-shade"></div>
+        <div class="spotlight-content">
+          <h1 id="spotlight-title">{{ movie.title }}</h1>
+          <p class="movie-meta">{{ year(movie) }} <span><i class="ph-fill ph-star"></i>{{ rating(movie) }}</span></p>
+          @if (movie.overview) { <p class="spotlight-copy">{{ movie.overview }}</p> }
+          <div class="spotlight-actions"><a class="btn btn-primary" href="#catalog-search"><i class="ph ph-magnifying-glass"></i>Explorar catálogo</a></div>
         </div>
-      </div>
-    </section>
+      </section>
+    }
 
     <div class="page catalog-content">
       <section class="discovery" aria-labelledby="discovery-title">
@@ -35,7 +34,7 @@ import { CatalogApiService, CatalogMovie } from '../core/catalog-api.service';
         <label class="catalog-search">
           <span class="sr-only">Título do filme</span>
           <i class="ph ph-magnifying-glass" aria-hidden="true"></i>
-          <input type="search" placeholder="Título do filme" [value]="query()" (input)="onQuery($event)" (keyup.enter)="search()" />
+          <input id="catalog-search" type="search" placeholder="Título do filme" [value]="query()" (input)="onQuery($event)" (keyup.enter)="search()" />
           <button type="button" (click)="search()">Buscar</button>
         </label>
       </section>
@@ -72,10 +71,11 @@ import { CatalogApiService, CatalogMovie } from '../core/catalog-api.service';
               <div class="poster-grid">
                 @for (movie of filteredMovies(); track movie.tmdbId; let index = $index) {
                   <article class="movie-card" [style.--delay]="index * 45 + 'ms'">
-                    <button class="poster" type="button" [attr.aria-label]="'Abrir ' + movie.title">
-                      <img [src]="posterUrl(movie, index)" [alt]="'Pôster de ' + movie.title" (error)="usePosterFallback($event, index)" />
-                      <span class="poster-action"><i class="ph ph-download-simple"></i></span>
-                    </button>
+                    <div class="poster">
+                      @if (movie.posterPath && !unavailablePosterIds().has(movie.tmdbId)) {
+                        <img [src]="posterUrl(movie)" [alt]="'Pôster de ' + movie.title" (error)="hidePoster(movie)" />
+                      } @else { <span class="poster-placeholder"><i class="ph ph-film-strip"></i></span> }
+                    </div>
                     <div class="movie-title-row"><h3>{{ movie.title }}</h3><span><i class="ph-fill ph-star"></i>{{ rating(movie) }}</span></div>
                     <p>{{ year(movie) }} @if (movie.originalTitle && movie.originalTitle !== movie.title) { <span>{{ movie.originalTitle }}</span> }</p>
                   </article>
@@ -98,7 +98,6 @@ export class CatalogPage {
   private readonly destroyRef = inject(DestroyRef);
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
-  private readonly posterFallbacks = ['/posters/deep-water.png', '/posters/white-mile.png', '/posters/afterimage.png', '/posters/vento-do-alto.png'];
   private activeRequest?: Subscription;
 
   readonly filters = ['Todos', 'Lançamentos', 'Mais bem avaliados'];
@@ -110,9 +109,11 @@ export class CatalogPage {
   readonly configurationMissing = signal(false);
   readonly lastSubmittedQuery = signal('');
   readonly movies = signal<CatalogMovie[]>([]);
+  readonly unavailablePosterIds = signal<ReadonlySet<number>>(new Set());
   readonly sectionTitle = computed(() => this.lastSubmittedQuery()
     ? `Resultados para “${this.lastSubmittedQuery()}”`
     : 'Em alta nesta semana');
+  readonly spotlightMovie = computed(() => this.movies().find((movie) => Boolean(movie.backdropPath)) ?? this.movies()[0]);
 
   readonly filteredMovies = computed(() => {
     const filter = this.activeFilter();
@@ -169,16 +170,16 @@ export class CatalogPage {
     });
   }
 
-  posterUrl(movie: CatalogMovie, index: number): string {
-    return movie.posterPath
-      ? `https://image.tmdb.org/t/p/w500${movie.posterPath}`
-      : this.posterFallbacks[index % this.posterFallbacks.length];
+  posterUrl(movie: CatalogMovie): string {
+    return `https://image.tmdb.org/t/p/w500${movie.posterPath}`;
   }
 
-  usePosterFallback(event: Event, index: number): void {
-    const image = event.target as HTMLImageElement;
-    image.onerror = null;
-    image.src = this.posterFallbacks[index % this.posterFallbacks.length];
+  backdropUrl(movie: CatalogMovie): string {
+    return `https://image.tmdb.org/t/p/w1280${movie.backdropPath}`;
+  }
+
+  hidePoster(movie: CatalogMovie): void {
+    this.unavailablePosterIds.update((ids) => new Set(ids).add(movie.tmdbId));
   }
 
   year(movie: CatalogMovie): number | string {
@@ -198,6 +199,7 @@ export class CatalogPage {
     this.activeRequest?.unsubscribe();
     this.viewState.set('loading');
     this.configurationMissing.set(false);
+    this.unavailablePosterIds.set(new Set());
     this.activeRequest = request.pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
       next: (movies) => {
         this.movies.set(movies);

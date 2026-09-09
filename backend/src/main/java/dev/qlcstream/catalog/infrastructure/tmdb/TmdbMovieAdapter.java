@@ -77,11 +77,12 @@ public class TmdbMovieAdapter implements MovieMetadataProvider {
             @JsonProperty("release_date") String releaseDate,
             String overview,
             @JsonProperty("poster_path") String posterPath,
+            @JsonProperty("backdrop_path") String backdropPath,
             @JsonProperty("vote_average") BigDecimal voteAverage) {
 
         Movie toDomain() {
             return new Movie(null, id, null, title, originalTitle, parseDate(releaseDate), overview, posterPath,
-                    voteAverage);
+                    backdropPath, voteAverage);
         }
 
         private static LocalDate parseDate(String value) {

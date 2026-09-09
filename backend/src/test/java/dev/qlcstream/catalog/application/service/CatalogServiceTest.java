@@ -16,12 +16,12 @@ class CatalogServiceTest {
 
     @Test
     void importsTrendingMoviesThroughPorts() {
-        var remoteMovie = new Movie(null, 42, null, "Maré profunda", "Deep Water",
-                LocalDate.of(2026, 4, 3), "Uma cidade desaparece do mapa.", "/poster.jpg",
+        var remoteMovie = new Movie(null, 42, null, "Filme de teste", "Test Movie",
+                LocalDate.of(2026, 4, 3), "Sinopse de teste.", "/poster.jpg", "/backdrop.jpg",
                 new BigDecimal("8.10"));
         var savedMovie = new Movie(7L, remoteMovie.tmdbId(), remoteMovie.imdbId(), remoteMovie.title(),
                 remoteMovie.originalTitle(), remoteMovie.releaseDate(), remoteMovie.overview(),
-                remoteMovie.posterPath(), remoteMovie.voteAverage());
+                remoteMovie.posterPath(), remoteMovie.backdropPath(), remoteMovie.voteAverage());
 
         MovieMetadataProvider provider = new StubMetadataProvider(List.of(remoteMovie));
         MovieCatalogRepository repository = movies -> List.of(savedMovie);

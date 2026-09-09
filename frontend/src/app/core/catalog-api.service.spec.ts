@@ -22,11 +22,12 @@ describe('CatalogApiService', () => {
     const movies: CatalogMovie[] = [{
       id: 1,
       tmdbId: 42,
-      title: 'Maré profunda',
-      originalTitle: 'Deep Water',
+      title: 'Filme de teste',
+      originalTitle: 'Test Movie',
       releaseDate: '2026-04-03',
       overview: 'Uma cidade desaparece do mapa.',
       posterPath: '/poster.jpg',
+      backdropPath: '/backdrop.jpg',
       voteAverage: 8.1,
     }];
 

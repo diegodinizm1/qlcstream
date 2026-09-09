@@ -10,6 +10,7 @@ export interface CatalogMovie {
   releaseDate: string | null;
   overview: string | null;
   posterPath: string | null;
+  backdropPath: string | null;
   voteAverage: number | null;
 }
 

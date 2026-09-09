@@ -50,11 +50,12 @@ public class CatalogController {
             LocalDate releaseDate,
             String overview,
             String posterPath,
+            String backdropPath,
             BigDecimal voteAverage) {
 
         static CatalogMovieResponse from(Movie movie) {
             return new CatalogMovieResponse(movie.id(), movie.tmdbId(), movie.title(), movie.originalTitle(),
-                    movie.releaseDate(), movie.overview(), movie.posterPath(), movie.voteAverage());
+                    movie.releaseDate(), movie.overview(), movie.posterPath(), movie.backdropPath(), movie.voteAverage());
         }
     }
 }

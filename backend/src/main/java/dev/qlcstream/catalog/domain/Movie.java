@@ -12,5 +12,6 @@ public record Movie(
         LocalDate releaseDate,
         String overview,
         String posterPath,
+        String backdropPath,
         BigDecimal voteAverage) {
 }
