@@ -14,10 +14,18 @@ nav:not(.mobile-nav) { display: flex; align-items: stretch; height: 100%; gap: 2
 nav:not(.mobile-nav) a { position: relative; display: grid; place-items: center; color: var(--muted); font-size: 13px; font-weight: 700; text-decoration: none; }
 nav:not(.mobile-nav) a:hover, nav:not(.mobile-nav) a.active { color: var(--text); }
 nav:not(.mobile-nav) a.active::after { content: ''; position: absolute; right: 0; bottom: -1px; left: 0; height: 2px; background: var(--accent); }
-.global-search { height: 36px; display: flex; align-items: center; gap: 9px; padding: 0 10px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface); color: var(--muted); }
+.global-search { position: relative; height: 36px; display: flex; align-items: center; gap: 9px; padding: 0 10px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface); color: var(--muted); }
 .global-search:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
 .global-search input { min-width: 0; flex: 1; border: 0; outline: 0; color: var(--text); background: transparent; font-size: 13px; }
 .global-search input::placeholder { color: var(--quiet); opacity: 1; }
+.autocomplete-list { position: absolute; z-index: 30; top: calc(100% + 7px); right: 0; left: 0; overflow: hidden; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface); box-shadow: 0 18px 38px rgba(0, 0, 0, .18); }
+.autocomplete-list button { width: 100%; min-height: 54px; display: flex; align-items: center; gap: 10px; padding: 7px; border: 0; border-bottom: 1px solid var(--line); color: var(--text); background: transparent; text-align: left; }
+.autocomplete-list button:last-child { border-bottom: 0; }
+.autocomplete-list button:hover, .autocomplete-list button:focus-visible { background: var(--surface-2); outline: 0; }
+.autocomplete-list img, .autocomplete-list > button > i { width: 29px; height: 40px; display: grid; flex: none; place-items: center; object-fit: cover; color: var(--quiet); background: var(--surface-2); }
+.autocomplete-list span { min-width: 0; display: grid; gap: 3px; }
+.autocomplete-list strong { overflow: hidden; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.autocomplete-list small { color: var(--muted); font: 10px var(--mono); }
 .topbar-actions { display: flex; gap: 2px; }
 .settings-link, .theme-toggle { width: 34px; height: 34px; display: grid; place-items: center; border: 0; border-radius: var(--radius-sm); color: var(--muted); background: transparent; font-size: 18px; text-decoration: none; }
 .settings-link:hover, .settings-link.active, .theme-toggle:hover { color: var(--text); background: var(--surface); }

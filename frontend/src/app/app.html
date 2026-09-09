@@ -15,7 +15,17 @@
       <form class="global-search" role="search" (submit)="searchCatalog($event)">
         <i class="ph ph-magnifying-glass" aria-hidden="true"></i>
         <label class="sr-only" for="global-catalog-search">Buscar filmes</label>
-        <input id="global-catalog-search" type="search" placeholder="Buscar no catálogo" [value]="globalQuery()" (input)="updateGlobalQuery($event)" />
+        <input id="global-catalog-search" type="search" autocomplete="off" placeholder="Buscar no catálogo" [value]="globalQuery()" (input)="updateGlobalQuery($event)" (focus)="openAutocomplete()" (blur)="closeAutocomplete()" />
+        @if (autocompleteOpen() && suggestions().length) {
+          <div class="autocomplete-list" role="listbox" aria-label="Filmes encontrados">
+            @for (movie of suggestions(); track movie.tmdbId) {
+              <button type="button" role="option" (mousedown)="$event.preventDefault()" (click)="selectSuggestion(movie)">
+                @if (movie.posterPath) { <img [src]="'https://image.tmdb.org/t/p/w92' + movie.posterPath" [alt]="''" /> } @else { <i class="ph ph-film-strip" aria-hidden="true"></i> }
+                <span><strong>{{ movie.title }}</strong><small>{{ movie.releaseDate?.slice(0, 4) || 'Sem data' }}</small></span>
+              </button>
+            }
+          </div>
+        }
       </form>
 
       <div class="topbar-actions">
