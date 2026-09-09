@@ -1,5 +1,7 @@
 .library-page { max-width: 1080px; }
 .empty-library { min-height: 260px; display: flex; align-items: center; gap: 20px; padding: 34px; border: 1px solid var(--line); border-radius: var(--radius-md); background: var(--surface); }
+.library-list { overflow: hidden; border: 1px solid var(--line); border-radius: var(--radius-md); background: var(--surface); }
+.library-row { display: grid; grid-template-columns: 48px minmax(0, 1fr) auto; align-items: center; gap: 16px; padding: 14px 18px; border-bottom: 1px solid var(--line); }.library-row:last-child { border-bottom: 0; }.library-poster { width: 48px; height: 68px; display: grid; place-items: center; overflow: hidden; color: var(--quiet); background: var(--surface-2); }.library-poster img { width: 100%; height: 100%; object-fit: cover; }.library-row a:not(.library-poster) { color: var(--text); font-weight: 800; text-decoration: none; }.library-row a:hover { color: var(--accent); }.library-row p { overflow: hidden; margin: 5px 0 8px; color: var(--muted); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }.library-row span { padding: 3px 6px; border: 1px solid var(--line); border-radius: 4px; color: var(--quiet); font: 10px var(--mono); }.library-row > strong { color: var(--muted); font: 12px var(--mono); }
 .empty-library > i { color: var(--accent); font-size: 38px; }
 .empty-library h2 { margin: 0; font-size: 18px; }
 .empty-library p { max-width: 420px; margin: 7px 0 0; color: var(--muted); font-size: 13px; line-height: 1.5; }

@@ -120,6 +120,14 @@ public class DownloadRow {
         return relativeDirectory;
     }
 
+    public long movieId() {
+        return movieId;
+    }
+
+    public UUID id() {
+        return id;
+    }
+
     public void synchronize(String hash, String state, double currentProgress, long size, long downloaded, long downloadSpeed,
             long eta, String normalizedStatus) {
         externalId = hash;
