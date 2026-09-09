@@ -161,4 +161,17 @@ public class DownloadRow {
         updatedAt = Instant.now();
         lastSyncedAt = updatedAt;
     }
+
+    public boolean markMissingFromEngine() {
+        if ("ERROR".equals(status)) {
+            return false;
+        }
+        status = "ERROR";
+        engineState = "missing";
+        downloadSpeedBps = 0;
+        etaSeconds = null;
+        updatedAt = Instant.now();
+        lastSyncedAt = updatedAt;
+        return true;
+    }
 }

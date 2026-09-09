@@ -16,7 +16,7 @@ import dev.qlcstream.downloads.infrastructure.web.DownloadUpdatePublisher;
 @Component
 public class QbittorrentDownloadSynchronizer {
 
-    private static final Set<String> FINAL_STATUSES = Set.of("COMPLETED", "CANCELED", "REMOVED");
+    private static final Set<String> FINAL_STATUSES = Set.of("COMPLETED", "CANCELED", "REMOVED", "ERROR");
 
     private final SpringDataDownloadRepository downloads;
     private final QbittorrentClient qbittorrent;
@@ -51,6 +51,8 @@ public class QbittorrentDownloadSynchronizer {
                         changed = true;
                     }
                 }
+            } else if (download.infoHash() != null && !download.infoHash().isBlank()) {
+                changed |= download.markMissingFromEngine();
             }
         }
         if (changed) updates.publish();
