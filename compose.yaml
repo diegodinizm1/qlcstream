@@ -64,6 +64,7 @@ services:
     image: qbittorrentofficial/qbittorrent-nox:latest
     environment:
       QBT_LEGAL_NOTICE: confirm
+      QBT_VERSION: 5.1.4
       QBT_WEBUI_PORT: 8080
       QBT_TORRENTING_PORT: 6881
     volumes:
