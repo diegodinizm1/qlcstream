@@ -29,7 +29,7 @@
       event.preventDefault(); const form = new FormData(event.currentTarget); const error = document.querySelector('#error'); error.textContent = '';
       const response = await fetch('/qbit-auth/api/v2/auth/login', { method:'POST', body:new URLSearchParams(form), credentials:'include' });
       if (!response.ok) { error.textContent = 'Não foi possível autenticar. Confira a senha temporária nos logs do contêiner.'; return; }
-      window.location.assign('http://localhost:8081/');
+      window.location.assign('/qbit-auth/');
     });
   </script>
 </body>
