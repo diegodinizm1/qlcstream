@@ -64,7 +64,16 @@ export class LibraryPage {
   quality(item: LibraryItem): string { return [item.resolutionHeight ? `${item.resolutionHeight}p` : null, item.sourceType, item.dynamicRange].filter(Boolean).join(' · ') || 'Versão local'; }
   size(bytes: number): string { return bytes >= 1_000_000_000 ? `${(bytes / 1_000_000_000).toFixed(1)} GB` : `${Math.max(1, Math.round(bytes / 1_000_000))} MB`; }
   remove(item: LibraryItem): void {
+    if (this.desktop()) {
+      this.desktopFile.confirmDeletion(item.movieTitle).then((confirmed) => {
+        if (confirmed) this.deleteFile(item);
+      });
+      return;
+    }
     if (!confirm(`Excluir o arquivo local de “${item.movieTitle}”? Esta ação não pode ser desfeita.`)) return;
+    this.deleteFile(item);
+  }
+  private deleteFile(item: LibraryItem): void {
     this.deletingId.set(item.id);
     this.libraryApi.remove(item.id).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({ next: () => { this.items.update((items) => items.filter((current) => current.id !== item.id)); this.deletingId.set(null); }, error: () => { this.errorMessage.set('Não foi possível excluir este arquivo.'); this.deletingId.set(null); } });
   }

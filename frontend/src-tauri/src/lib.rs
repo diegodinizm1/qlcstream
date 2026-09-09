@@ -58,6 +58,7 @@ fn reveal_library_file(relative_path: String) -> Result<(), String> {
 pub fn run() {
   tauri::Builder::default()
     .invoke_handler(tauri::generate_handler![open_library_file, reveal_library_file])
+    .plugin(tauri_plugin_dialog::init())
     .setup(|app| {
       if cfg!(debug_assertions) {
         app.handle().plugin(
