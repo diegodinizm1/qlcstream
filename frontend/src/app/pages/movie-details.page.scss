@@ -21,6 +21,11 @@
 .overview { max-width: 720px; margin-top: 36px; padding-top: 26px; border-top: 1px solid var(--line); }
 .overview h2 { margin: 0 0 10px; font-size: 17px; }
 .overview p { margin: 0; color: var(--muted); font-size: 15px; line-height: 1.65; }
+.release-button { margin-top: 28px; }
+.release-overlay { position: fixed; z-index: 20; inset: 0; display: grid; place-items: center; padding: 24px; background: rgba(3, 8, 10, .72); backdrop-filter: blur(5px); }
+.release-modal { width: min(100%, 760px); max-height: min(78vh, 680px); overflow: auto; padding: 24px; border: 1px solid var(--line); border-radius: var(--radius-md); background: var(--surface); box-shadow: 0 24px 80px rgba(0,0,0,.45); }
+.release-modal header { display:flex; justify-content:space-between; gap:16px; align-items:flex-start; padding-bottom:18px; border-bottom:1px solid var(--line); }.release-modal header p { margin:0 0 5px; color:var(--accent); font:10px var(--mono); letter-spacing:.08em; }.release-modal h2 { margin:0; font-size:23px; }
+.release-state { padding:42px 4px; color:var(--muted); text-align:center; }.release-state i { margin-right:8px; color:var(--accent); }.release-state.error { color:var(--danger); }.release-list article { display:flex; justify-content:space-between; align-items:center; gap:16px; padding:16px 0; border-bottom:1px solid var(--line); }.release-list article:last-child { border:0; }.release-list strong { display:block; font-size:14px; }.release-list p { margin:6px 0 0; color:var(--muted); font-size:11px; }
 .details-state { min-height: 360px; display: flex; align-items: center; justify-content: center; gap: 14px; color: var(--muted); }
 .details-state > i { color: var(--accent); font-size: 28px; }
 .details-error { justify-content: flex-start; padding: 34px; border: 1px solid var(--line); border-radius: var(--radius-md); background: var(--surface); }

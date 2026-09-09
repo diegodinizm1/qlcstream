@@ -4,6 +4,7 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 
 import { CatalogApiService, MovieDetails } from '../core/catalog-api.service';
+import { ReleaseOption, ReleasesApiService } from '../core/releases-api.service';
 
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -38,10 +39,12 @@ import { CatalogApiService, MovieDetails } from '../core/catalog-api.service';
                 @if (details.originalTitle && details.originalTitle !== details.title) { <p class="original-title">{{ details.originalTitle }}</p> }
                 @if (details.tagline) { <p class="tagline">{{ details.tagline }}</p> }
                 @if (details.genres.length) { <ul class="genre-list" aria-label="Gêneros">@for (genre of details.genres; track genre) { <li>{{ genre }}</li> }</ul> }
+                <button class="btn btn-primary release-button" type="button" (click)="openReleases(details)"><i class="ph ph-download-simple"></i>Opções de download</button>
                 <section class="overview" aria-labelledby="overview-title"><h2 id="overview-title">Sinopse</h2><p>{{ details.overview || 'Sinopse ainda não disponível.' }}</p></section>
               </article>
             </div>
           </main>
+          @if (showReleases()) { <div class="release-overlay" role="presentation" (click)="closeReleases()"><section class="release-modal" role="dialog" aria-modal="true" aria-labelledby="release-title" (click)="$event.stopPropagation()"><header><div><p>FONTES DISPONÍVEIS</p><h2 id="release-title">{{ details.title }}</h2></div><button class="icon-button" type="button" aria-label="Fechar" (click)="closeReleases()"><i class="ph ph-x"></i></button></header>@if (releaseState() === 'loading') { <div class="release-state"><i class="ph ph-spinner-gap"></i>Buscando opções no Prowlarr.</div> } @else if (releaseState() === 'error') { <div class="release-state error">Não foi possível buscar opções. Confira o Prowlarr e tente novamente.</div> } @else if (!releases().length) { <div class="release-state">Nenhuma opção encontrada para este título.</div> } @else { <div class="release-list">@for (release of releases(); track release.downloadUrl + release.title) { <article><div><strong>{{ release.title }}</strong><p>{{ release.indexer || 'Indexador' }} · {{ release.seeders ?? 0 }} seeders · {{ size(release.size) }}</p></div><a class="btn btn-quiet" [href]="release.infoUrl || release.downloadUrl" target="_blank" rel="noreferrer">Ver fonte</a></article> }</div> }</section></div> }
         }
       }
     }
@@ -51,10 +54,14 @@ export class MovieDetailsPage {
   private readonly catalogApi = inject(CatalogApiService);
   private readonly route = inject(ActivatedRoute);
   private readonly destroyRef = inject(DestroyRef);
+  private readonly releasesApi = inject(ReleasesApiService);
 
   readonly state = signal<'loading' | 'ready' | 'error'>('loading');
   readonly movie = signal<MovieDetails | null>(null);
   readonly errorMessage = signal('Confira a conexão com o TMDB e tente novamente.');
+  readonly showReleases = signal(false);
+  readonly releaseState = signal<'loading' | 'ready' | 'error'>('ready');
+  readonly releases = signal<ReleaseOption[]>([]);
 
   constructor() {
     this.route.paramMap.pipe(takeUntilDestroyed(this.destroyRef)).subscribe((params) => {
@@ -87,6 +94,9 @@ export class MovieDetailsPage {
   rating(movie: MovieDetails): string {
     return movie.voteAverage == null ? 'N/D' : movie.voteAverage.toFixed(1);
   }
+  openReleases(movie: MovieDetails): void { this.showReleases.set(true); this.releaseState.set('loading'); this.releasesApi.search(movie.title).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({ next: (releases) => { this.releases.set(releases); this.releaseState.set('ready'); }, error: () => this.releaseState.set('error') }); }
+  closeReleases(): void { this.showReleases.set(false); }
+  size(bytes: number | null): string { return bytes ? `${(bytes / 1_000_000_000).toFixed(1)} GB` : 'Tamanho não informado'; }
 
   private load(tmdbId: number): void {
     this.state.set('loading');
