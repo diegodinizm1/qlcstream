@@ -1,19 +1,39 @@
-<div class="app-shell">
-  <aside class="sidebar">
-    <a class="brand" routerLink="/catalog" aria-label="QLC Stream">
-      <span class="brand-mark">Q</span>
-      <span><strong>QLC Stream</strong><small>Biblioteca local</small></span>
-    </a>
-    <nav aria-label="Navegação principal">
-      <a routerLink="/catalog" routerLinkActive="active"><span>Catálogo</span><small>Explorar</small></a>
-      <a routerLink="/downloads" routerLinkActive="active"><span>Downloads</span><small>0 ativos</small></a>
-      <a routerLink="/library" routerLinkActive="active"><span>Biblioteca</span><small>Arquivos locais</small></a>
-      <a routerLink="/settings" routerLinkActive="active"><span>Configurações</span><small>Integrações</small></a>
-    </nav>
-    <div class="local-status">
-      <span class="status-dot"></span>
-      <div><strong>Modo local</strong><small>Seus arquivos ficam aqui</small></div>
+<div class="app-shell" [attr.data-theme]="theme()">
+  <header class="topbar">
+    <div class="topbar-inner">
+      <a class="brand" routerLink="/catalog" aria-label="QLC Stream">
+        <span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span>
+        <span class="brand-name">QLC</span><span class="brand-suffix">stream</span>
+      </a>
+
+      <nav aria-label="Navegação principal">
+        <a routerLink="/catalog" routerLinkActive="active">Filmes</a>
+        <a routerLink="/downloads" routerLinkActive="active">Downloads</a>
+        <a routerLink="/library" routerLinkActive="active">Biblioteca</a>
+      </nav>
+
+      <label class="global-search">
+        <i class="ph ph-magnifying-glass" aria-hidden="true"></i>
+        <span class="sr-only">Buscar filmes</span>
+        <input type="search" placeholder="Buscar no catálogo" />
+        <kbd>/</kbd>
+      </label>
+
+      <div class="topbar-actions">
+        <button class="theme-toggle" type="button" (click)="toggleTheme()" [attr.aria-label]="theme() === 'dark' ? 'Usar tema claro' : 'Usar tema escuro'">
+          <i [class]="theme() === 'dark' ? 'ph ph-sun' : 'ph ph-moon'" aria-hidden="true"></i>
+        </button>
+        <a class="settings-link" routerLink="/settings" routerLinkActive="active" aria-label="Configurações"><i class="ph ph-gear-six" aria-hidden="true"></i></a>
+      </div>
     </div>
-  </aside>
+  </header>
+
   <main><router-outlet /></main>
+
+  <nav class="mobile-nav" aria-label="Navegação móvel">
+    <a routerLink="/catalog" routerLinkActive="active"><i class="ph ph-film-slate"></i><span>Filmes</span></a>
+    <a routerLink="/downloads" routerLinkActive="active"><i class="ph ph-download-simple"></i><span>Downloads</span></a>
+    <a routerLink="/library" routerLinkActive="active"><i class="ph ph-books"></i><span>Biblioteca</span></a>
+    <a routerLink="/settings" routerLinkActive="active"><i class="ph ph-gear-six"></i><span>Ajustes</span></a>
+  </nav>
 </div>

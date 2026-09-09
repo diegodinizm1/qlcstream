@@ -21,7 +21,7 @@ describe('App', () => {
     const fixture = TestBed.createComponent(App);
     await fixture.whenStable();
     const compiled = fixture.nativeElement as HTMLElement;
-    expect(compiled.querySelector('.brand')?.textContent).toContain('QLC Stream');
-    expect(compiled.querySelector('nav')?.textContent).toContain('Catálogo');
+    expect(compiled.querySelector('.brand')?.getAttribute('aria-label')).toBe('QLC Stream');
+    expect(compiled.querySelector('nav')?.textContent).toContain('Filmes');
   });
 });
