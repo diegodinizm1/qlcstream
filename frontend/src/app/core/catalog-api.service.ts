@@ -2,6 +2,8 @@ import { HttpClient } from '@angular/common/http';
 import { inject, Injectable } from '@angular/core';
 import { Observable } from 'rxjs';
 
+import { apiUrl } from './api-url';
+
 export interface CatalogMovie {
   id: number;
   tmdbId: number;
@@ -27,25 +29,25 @@ export class CatalogApiService {
   private readonly http = inject(HttpClient);
 
   trending(language = 'pt-BR', page = 1): Observable<CatalogMovie[]> {
-    return this.http.get<CatalogMovie[]>('/api/catalog/trending', {
+    return this.http.get<CatalogMovie[]>(apiUrl('/api/catalog/trending'), {
       params: { language, page },
     });
   }
 
   discover(collection: CatalogCollection, language = 'pt-BR', page = 1): Observable<CatalogMovie[]> {
-    return this.http.get<CatalogMovie[]>('/api/catalog/discover', {
+    return this.http.get<CatalogMovie[]>(apiUrl('/api/catalog/discover'), {
       params: { collection, language, page },
     });
   }
 
   search(query: string, language = 'pt-BR', page = 1): Observable<CatalogMovie[]> {
-    return this.http.get<CatalogMovie[]>('/api/catalog/search', {
+    return this.http.get<CatalogMovie[]>(apiUrl('/api/catalog/search'), {
       params: { query, language, page },
     });
   }
 
   details(tmdbId: number, language = 'pt-BR'): Observable<MovieDetails> {
-    return this.http.get<MovieDetails>(`/api/catalog/${tmdbId}`, {
+    return this.http.get<MovieDetails>(apiUrl(`/api/catalog/${tmdbId}`), {
       params: { language },
     });
   }

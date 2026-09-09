@@ -4,6 +4,7 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { RouterLink } from '@angular/router';
 
 import { DownloadsApiService, DownloadSummary } from '../core/downloads-api.service';
+import { apiUrl } from '../core/api-url';
 
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -62,7 +63,7 @@ export class DownloadsPage {
     this.downloadsApi.control(download.id, action).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({ next: () => this.load(false), error: () => this.errorMessage.set('Não foi possível executar esta ação no qBittorrent.') });
   }
   private subscribeToUpdates(): void {
-    const source = new EventSource('/api/downloads/events');
+    const source = new EventSource(apiUrl('/api/downloads/events'));
     source.addEventListener('downloads-changed', () => this.load(false));
     this.destroyRef.onDestroy(() => source.close());
   }

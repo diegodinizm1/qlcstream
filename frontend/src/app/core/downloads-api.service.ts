@@ -2,6 +2,8 @@ import { HttpClient } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
 
+import { apiUrl } from './api-url';
+
 export interface DownloadSummary {
   id: string;
   movieTmdbId: number;
@@ -40,14 +42,14 @@ export class DownloadsApiService {
   private readonly http = inject(HttpClient);
 
   active(): Observable<DownloadSummary[]> {
-    return this.http.get<DownloadSummary[]>('/api/downloads');
+    return this.http.get<DownloadSummary[]>(apiUrl('/api/downloads'));
   }
 
   enqueue(request: CreateDownloadRequest): Observable<SubmittedDownload> {
-    return this.http.post<SubmittedDownload>('/api/downloads', request);
+    return this.http.post<SubmittedDownload>(apiUrl('/api/downloads'), request);
   }
 
   control(id: string, action: 'pause' | 'resume' | 'cancel'): Observable<void> {
-    return this.http.post<void>(`/api/downloads/${id}/${action.toUpperCase()}`, {});
+    return this.http.post<void>(apiUrl(`/api/downloads/${id}/${action.toUpperCase()}`), {});
   }
 }
