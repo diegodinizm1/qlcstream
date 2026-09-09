@@ -34,11 +34,11 @@ public class QbittorrentClient {
             var client = HttpClient.newBuilder().cookieHandler(new CookieManager(null, CookiePolicy.ACCEPT_ALL))
                     .connectTimeout(Duration.ofSeconds(5)).build();
             var login = post(client, "/api/v2/auth/login", Map.of("username", properties.username(), "password", properties.password()));
-            if (login.statusCode() < 200 || login.statusCode() >= 300 || !login.body().trim().equalsIgnoreCase("Ok.")) {
+            if (login.statusCode() < 200 || login.statusCode() >= 300) {
                 throw new QbittorrentUnavailableException("Não foi possível autenticar no qBittorrent.");
             }
             var add = post(client, "/api/v2/torrents/add", Map.of("urls", acquisitionRef, "savepath", savePath));
-            if (add.statusCode() < 200 || add.statusCode() >= 300 || !add.body().trim().equalsIgnoreCase("Ok.")) {
+            if (add.statusCode() < 200 || add.statusCode() >= 300) {
                 throw new QbittorrentUnavailableException("O qBittorrent recusou esta fonte de download.");
             }
         } catch (IOException exception) {
