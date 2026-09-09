@@ -12,6 +12,7 @@ import org.springframework.web.client.RestClient;
 
 import dev.qlcstream.catalog.application.port.out.MovieMetadataProvider;
 import dev.qlcstream.catalog.domain.Movie;
+import dev.qlcstream.catalog.domain.MovieDetails;
 
 @Component
 public class TmdbMovieAdapter implements MovieMetadataProvider {
@@ -54,6 +55,22 @@ public class TmdbMovieAdapter implements MovieMetadataProvider {
         return map(response);
     }
 
+    @Override
+    public MovieDetails details(long tmdbId, String language) {
+        requireConfiguration();
+        var response = client.get()
+                .uri(uri -> uri.path("/movie/{tmdbId}")
+                        .queryParam("language", language)
+                        .build(tmdbId))
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + properties.apiToken())
+                .retrieve()
+                .body(TmdbMovieDetails.class);
+        if (response == null) {
+            throw new IllegalStateException("TMDB não retornou detalhes para o filme solicitado.");
+        }
+        return response.toDomain();
+    }
+
     private void requireConfiguration() {
         if (!properties.configured()) {
             throw new TmdbNotConfiguredException();
@@ -65,6 +82,17 @@ public class TmdbMovieAdapter implements MovieMetadataProvider {
             return List.of();
         }
         return page.results().stream().map(TmdbMovie::toDomain).toList();
+    }
+
+    private static LocalDate parseDate(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        try {
+            return LocalDate.parse(value);
+        } catch (DateTimeParseException ignored) {
+            return null;
+        }
     }
 
     private record TmdbMoviePage(List<TmdbMovie> results) {
@@ -84,16 +112,29 @@ public class TmdbMovieAdapter implements MovieMetadataProvider {
             return new Movie(null, id, null, title, originalTitle, parseDate(releaseDate), overview, posterPath,
                     backdropPath, voteAverage);
         }
+    }
 
-        private static LocalDate parseDate(String value) {
-            if (value == null || value.isBlank()) {
-                return null;
-            }
-            try {
-                return LocalDate.parse(value);
-            } catch (DateTimeParseException ignored) {
-                return null;
-            }
+    private record TmdbMovieDetails(
+            long id,
+            String title,
+            @JsonProperty("original_title") String originalTitle,
+            @JsonProperty("release_date") String releaseDate,
+            String overview,
+            String tagline,
+            int runtime,
+            @JsonProperty("poster_path") String posterPath,
+            @JsonProperty("backdrop_path") String backdropPath,
+            @JsonProperty("vote_average") BigDecimal voteAverage,
+            List<TmdbGenre> genres) {
+
+        MovieDetails toDomain() {
+            var movie = new Movie(null, id, null, title, originalTitle, parseDate(releaseDate), overview, posterPath,
+                    backdropPath, voteAverage);
+            var genreNames = genres == null ? List.<String>of() : genres.stream().map(TmdbGenre::name).toList();
+            return new MovieDetails(movie, tagline, runtime, genreNames);
         }
+    }
+
+    private record TmdbGenre(String name) {
     }
 }

@@ -46,4 +46,15 @@ describe('CatalogApiService', () => {
     expect(request.request.params.get('query')).toBe('Matrix');
     request.flush([]);
   });
+
+  it('requests the details for a selected TMDB movie', () => {
+    service.details(42).subscribe();
+
+    const request = http.expectOne('/api/catalog/42?language=pt-BR');
+    request.flush({
+      id: 1, tmdbId: 42, title: 'Filme de teste', originalTitle: 'Test Movie', releaseDate: '2026-04-03',
+      overview: 'Sinopse de teste.', posterPath: '/poster.jpg', backdropPath: '/backdrop.jpg', voteAverage: 8.1,
+      tagline: 'Uma frase de teste.', runtimeMinutes: 120, genres: ['Drama'],
+    });
+  });
 });

@@ -20,7 +20,10 @@ import { CatalogApiService, CatalogMovie } from '../core/catalog-api.service';
           <h1 id="spotlight-title">{{ movie.title }}</h1>
           <p class="movie-meta">{{ year(movie) }} <span><i class="ph-fill ph-star"></i>{{ rating(movie) }}</span></p>
           @if (movie.overview) { <p class="spotlight-copy">{{ movie.overview }}</p> }
-          <div class="spotlight-actions"><a class="btn btn-primary" href="#catalog-search"><i class="ph ph-magnifying-glass"></i>Explorar catálogo</a></div>
+          <div class="spotlight-actions">
+            <a class="btn btn-primary" href="#catalog-search"><i class="ph ph-magnifying-glass"></i>Explorar catálogo</a>
+            <a class="btn btn-secondary" [routerLink]="['/catalog', movie.tmdbId]"><i class="ph ph-info"></i>Detalhes</a>
+          </div>
         </div>
       </section>
     }
@@ -71,13 +74,15 @@ import { CatalogApiService, CatalogMovie } from '../core/catalog-api.service';
               <div class="poster-grid">
                 @for (movie of filteredMovies(); track movie.tmdbId; let index = $index) {
                   <article class="movie-card" [style.--delay]="index * 45 + 'ms'">
-                    <div class="poster">
-                      @if (movie.posterPath && !unavailablePosterIds().has(movie.tmdbId)) {
-                        <img [src]="posterUrl(movie)" [alt]="'Pôster de ' + movie.title" (error)="hidePoster(movie)" />
-                      } @else { <span class="poster-placeholder"><i class="ph ph-film-strip"></i></span> }
-                    </div>
-                    <div class="movie-title-row"><h3>{{ movie.title }}</h3><span><i class="ph-fill ph-star"></i>{{ rating(movie) }}</span></div>
-                    <p>{{ year(movie) }} @if (movie.originalTitle && movie.originalTitle !== movie.title) { <span>{{ movie.originalTitle }}</span> }</p>
+                    <a class="movie-link" [routerLink]="['/catalog', movie.tmdbId]" [attr.aria-label]="'Abrir detalhes de ' + movie.title">
+                      <div class="poster">
+                        @if (movie.posterPath && !unavailablePosterIds().has(movie.tmdbId)) {
+                          <img [src]="posterUrl(movie)" [alt]="'Pôster de ' + movie.title" (error)="hidePoster(movie)" />
+                        } @else { <span class="poster-placeholder"><i class="ph ph-film-strip"></i></span> }
+                      </div>
+                      <div class="movie-title-row"><h3>{{ movie.title }}</h3><span><i class="ph-fill ph-star"></i>{{ rating(movie) }}</span></div>
+                      <p>{{ year(movie) }} @if (movie.originalTitle && movie.originalTitle !== movie.title) { <span>{{ movie.originalTitle }}</span> }</p>
+                    </a>
                   </article>
                 }
               </div>
@@ -171,11 +176,11 @@ export class CatalogPage {
   }
 
   posterUrl(movie: CatalogMovie): string {
-    return `https://image.tmdb.org/t/p/w500${movie.posterPath}`;
+    return movie.posterPath ? `https://image.tmdb.org/t/p/w500${movie.posterPath}` : '';
   }
 
   backdropUrl(movie: CatalogMovie): string {
-    return `https://image.tmdb.org/t/p/w1280${movie.backdropPath}`;
+    return movie.backdropPath ? `https://image.tmdb.org/t/p/w1280${movie.backdropPath}` : '';
   }
 
   hidePoster(movie: CatalogMovie): void {

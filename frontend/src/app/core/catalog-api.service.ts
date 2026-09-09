@@ -14,6 +14,12 @@ export interface CatalogMovie {
   voteAverage: number | null;
 }
 
+export interface MovieDetails extends CatalogMovie {
+  tagline: string | null;
+  runtimeMinutes: number;
+  genres: string[];
+}
+
 @Injectable({ providedIn: 'root' })
 export class CatalogApiService {
   private readonly http = inject(HttpClient);
@@ -27,6 +33,12 @@ export class CatalogApiService {
   search(query: string, language = 'pt-BR', page = 1): Observable<CatalogMovie[]> {
     return this.http.get<CatalogMovie[]>('/api/catalog/search', {
       params: { query, language, page },
+    });
+  }
+
+  details(tmdbId: number, language = 'pt-BR'): Observable<MovieDetails> {
+    return this.http.get<MovieDetails>(`/api/catalog/${tmdbId}`, {
+      params: { language },
     });
   }
 }
