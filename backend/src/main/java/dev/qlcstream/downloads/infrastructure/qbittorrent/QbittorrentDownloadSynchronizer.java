@@ -15,7 +15,7 @@ import dev.qlcstream.library.LocalLibraryRegistrar;
 @Component
 public class QbittorrentDownloadSynchronizer {
 
-    private static final Set<String> FINAL_STATUSES = Set.of("COMPLETED", "SEEDING", "CANCELED", "REMOVED");
+    private static final Set<String> FINAL_STATUSES = Set.of("COMPLETED", "CANCELED", "REMOVED");
 
     private final SpringDataDownloadRepository downloads;
     private final QbittorrentClient qbittorrent;
