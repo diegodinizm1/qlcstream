@@ -20,6 +20,8 @@ export interface MovieDetails extends CatalogMovie {
   genres: string[];
 }
 
+export type CatalogCollection = 'POPULAR' | 'TOP_RATED' | 'ESTABLISHED' | 'RECENT';
+
 @Injectable({ providedIn: 'root' })
 export class CatalogApiService {
   private readonly http = inject(HttpClient);
@@ -27,6 +29,12 @@ export class CatalogApiService {
   trending(language = 'pt-BR', page = 1): Observable<CatalogMovie[]> {
     return this.http.get<CatalogMovie[]>('/api/catalog/trending', {
       params: { language, page },
+    });
+  }
+
+  discover(collection: CatalogCollection, language = 'pt-BR', page = 1): Observable<CatalogMovie[]> {
+    return this.http.get<CatalogMovie[]>('/api/catalog/discover', {
+      params: { collection, language, page },
     });
   }
 

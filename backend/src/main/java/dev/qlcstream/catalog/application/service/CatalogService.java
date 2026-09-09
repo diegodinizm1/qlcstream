@@ -9,6 +9,7 @@ import dev.qlcstream.catalog.application.port.in.BrowseCatalogUseCase;
 import dev.qlcstream.catalog.application.port.in.ViewMovieDetailsUseCase;
 import dev.qlcstream.catalog.application.port.out.MovieCatalogRepository;
 import dev.qlcstream.catalog.application.port.out.MovieMetadataProvider;
+import dev.qlcstream.catalog.domain.CatalogCollection;
 import dev.qlcstream.catalog.domain.Movie;
 import dev.qlcstream.catalog.domain.MovieDetails;
 
@@ -27,6 +28,11 @@ public class CatalogService implements BrowseCatalogUseCase, ViewMovieDetailsUse
     @Override
     public List<Movie> trending(String language, int page) {
         return catalogRepository.saveAll(metadataProvider.trending(language, page));
+    }
+
+    @Override
+    public List<Movie> discover(CatalogCollection collection, String language, int page) {
+        return catalogRepository.saveAll(metadataProvider.discover(collection, language, page));
     }
 
     @Override

@@ -4,7 +4,7 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { Observable, Subscription } from 'rxjs';
 
-import { CatalogApiService, CatalogMovie } from '../core/catalog-api.service';
+import { CatalogApiService, CatalogCollection, CatalogMovie } from '../core/catalog-api.service';
 
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -43,15 +43,15 @@ import { CatalogApiService, CatalogMovie } from '../core/catalog-api.service';
       </section>
 
       <div class="filters" aria-label="Filtros rápidos">
-        @for (filter of filters; track filter) {
-          <button type="button" [class.active]="filter === activeFilter()" (click)="activeFilter.set(filter)">{{ filter }}</button>
+        @for (filter of filters; track filter.collection) {
+          <button type="button" [class.active]="filter.collection === activeFilter()" (click)="selectFilter(filter.collection)">{{ filter.label }}</button>
         }
       </div>
 
       <section aria-labelledby="popular-title">
         <div class="section-heading">
           <h2 id="popular-title">{{ sectionTitle() }}</h2>
-          <span class="catalog-count">{{ filteredMovies().length }} filmes</span>
+          <span class="catalog-count">{{ movies().length }} filmes</span>
         </div>
 
         @switch (viewState()) {
@@ -70,9 +70,9 @@ import { CatalogApiService, CatalogMovie } from '../core/catalog-api.service';
             </div>
           }
           @default {
-            @if (filteredMovies().length) {
+            @if (movies().length) {
               <div class="poster-grid">
-                @for (movie of filteredMovies(); track movie.tmdbId; let index = $index) {
+                @for (movie of movies(); track movie.tmdbId; let index = $index) {
                   <article class="movie-card" [style.--delay]="index * 45 + 'ms'">
                     <a class="movie-link" [routerLink]="['/catalog', movie.tmdbId]" [attr.aria-label]="'Abrir detalhes de ' + movie.title">
                       <div class="poster">
@@ -105,9 +105,14 @@ export class CatalogPage {
   private readonly router = inject(Router);
   private activeRequest?: Subscription;
 
-  readonly filters = ['Todos', 'Lançamentos', 'Mais bem avaliados'];
+  readonly filters: ReadonlyArray<{ collection: CatalogCollection; label: string }> = [
+    { collection: 'ESTABLISHED', label: 'Catálogo consolidado' },
+    { collection: 'POPULAR', label: 'Populares' },
+    { collection: 'TOP_RATED', label: 'Bem avaliados' },
+    { collection: 'RECENT', label: 'Lançamentos' },
+  ];
   readonly skeletons = [1, 2, 3, 4];
-  readonly activeFilter = signal('Todos');
+  readonly activeFilter = signal<CatalogCollection>('ESTABLISHED');
   readonly query = signal('');
   readonly viewState = signal<'ready' | 'loading' | 'error'>('loading');
   readonly errorMessage = signal('Confira a conexão com o backend e tente novamente.');
@@ -115,20 +120,13 @@ export class CatalogPage {
   readonly lastSubmittedQuery = signal('');
   readonly movies = signal<CatalogMovie[]>([]);
   readonly unavailablePosterIds = signal<ReadonlySet<number>>(new Set());
-  readonly sectionTitle = computed(() => this.lastSubmittedQuery()
-    ? `Resultados para “${this.lastSubmittedQuery()}”`
-    : 'Em alta nesta semana');
-  readonly spotlightMovie = computed(() => this.movies().find((movie) => Boolean(movie.backdropPath)) ?? this.movies()[0]);
-
-  readonly filteredMovies = computed(() => {
-    const filter = this.activeFilter();
-    const currentYear = new Date().getFullYear();
-    return this.movies().filter((movie) => {
-      return filter === 'Todos'
-        || (filter === 'Lançamentos' && this.year(movie) === currentYear)
-        || (filter === 'Mais bem avaliados' && (movie.voteAverage ?? 0) >= 8);
-    });
+  readonly sectionTitle = computed(() => {
+    if (this.lastSubmittedQuery()) {
+      return `Resultados para “${this.lastSubmittedQuery()}”`;
+    }
+    return this.filters.find((filter) => filter.collection === this.activeFilter())?.label ?? 'Catálogo';
   });
+  readonly spotlightMovie = computed(() => this.movies().find((movie) => Boolean(movie.backdropPath)) ?? this.movies()[0]);
 
   constructor() {
     this.route.queryParamMap.pipe(takeUntilDestroyed(this.destroyRef)).subscribe((params) => {
@@ -162,12 +160,24 @@ export class CatalogPage {
 
   retry(): void {
     const query = this.lastSubmittedQuery();
-    this.load(query ? this.catalogApi.search(query) : this.catalogApi.trending());
+    this.load(query ? this.catalogApi.search(query) : this.catalogApi.discover(this.activeFilter()));
+  }
+
+  selectFilter(collection: CatalogCollection): void {
+    if (this.lastSubmittedQuery()) {
+      this.activeFilter.set(collection);
+      this.clearSearch();
+      return;
+    }
+    if (collection === this.activeFilter()) {
+      return;
+    }
+    this.activeFilter.set(collection);
+    this.loadCollection();
   }
 
   clearSearch(): void {
     this.query.set('');
-    this.activeFilter.set('Todos');
     void this.router.navigate([], {
       relativeTo: this.route,
       queryParams: { q: null },
@@ -197,7 +207,11 @@ export class CatalogPage {
 
   private loadTrending(): void {
     this.lastSubmittedQuery.set('');
-    this.load(this.catalogApi.trending());
+    this.loadCollection();
+  }
+
+  private loadCollection(): void {
+    this.load(this.catalogApi.discover(this.activeFilter()));
   }
 
   private load(request: Observable<CatalogMovie[]>): void {

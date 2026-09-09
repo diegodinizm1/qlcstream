@@ -39,6 +39,15 @@ describe('CatalogApiService', () => {
     request.flush(movies);
   });
 
+  it('requests a curated discovery collection', () => {
+    service.discover('ESTABLISHED').subscribe();
+
+    const request = http.expectOne((candidate) => candidate.url === '/api/catalog/discover');
+    expect(request.request.params.get('collection')).toBe('ESTABLISHED');
+    expect(request.request.params.get('language')).toBe('pt-BR');
+    request.flush([]);
+  });
+
   it('sends the submitted title to catalog search', () => {
     service.search('Matrix').subscribe();
 

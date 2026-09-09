@@ -10,6 +10,7 @@ import org.junit.jupiter.api.Test;
 
 import dev.qlcstream.catalog.application.port.out.MovieCatalogRepository;
 import dev.qlcstream.catalog.application.port.out.MovieMetadataProvider;
+import dev.qlcstream.catalog.domain.CatalogCollection;
 import dev.qlcstream.catalog.domain.Movie;
 import dev.qlcstream.catalog.domain.MovieDetails;
 
@@ -56,6 +57,11 @@ class CatalogServiceTest {
 
         @Override
         public List<Movie> trending(String language, int page) {
+            return movies;
+        }
+
+        @Override
+        public List<Movie> discover(CatalogCollection collection, String language, int page) {
             return movies;
         }
 

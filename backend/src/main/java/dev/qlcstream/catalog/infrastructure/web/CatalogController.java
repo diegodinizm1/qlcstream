@@ -17,6 +17,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import dev.qlcstream.catalog.application.port.in.BrowseCatalogUseCase;
 import dev.qlcstream.catalog.application.port.in.ViewMovieDetailsUseCase;
+import dev.qlcstream.catalog.domain.CatalogCollection;
 import dev.qlcstream.catalog.domain.Movie;
 import dev.qlcstream.catalog.domain.MovieDetails;
 
@@ -38,6 +39,14 @@ public class CatalogController {
             @RequestParam(defaultValue = "pt-BR") String language,
             @RequestParam(defaultValue = "1") @Min(1) @Max(500) int page) {
         return browseCatalog.trending(language, page).stream().map(CatalogMovieResponse::from).toList();
+    }
+
+    @GetMapping("/discover")
+    List<CatalogMovieResponse> discover(
+            @RequestParam(defaultValue = "POPULAR") CatalogCollection collection,
+            @RequestParam(defaultValue = "pt-BR") String language,
+            @RequestParam(defaultValue = "1") @Min(1) @Max(500) int page) {
+        return browseCatalog.discover(collection, language, page).stream().map(CatalogMovieResponse::from).toList();
     }
 
     @GetMapping("/search")

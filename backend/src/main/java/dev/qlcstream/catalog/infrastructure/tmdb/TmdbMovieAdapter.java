@@ -11,6 +11,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 
 import dev.qlcstream.catalog.application.port.out.MovieMetadataProvider;
+import dev.qlcstream.catalog.domain.CatalogCollection;
 import dev.qlcstream.catalog.domain.Movie;
 import dev.qlcstream.catalog.domain.MovieDetails;
 
@@ -37,6 +38,39 @@ public class TmdbMovieAdapter implements MovieMetadataProvider {
                 .retrieve()
                 .body(TmdbMoviePage.class);
         return map(response);
+    }
+
+    @Override
+    public List<Movie> discover(CatalogCollection collection, String language, int page) {
+        requireConfiguration();
+        var request = client.get()
+                .uri(uri -> {
+                    var builder = uri.path("/discover/movie")
+                            .queryParam("language", language)
+                            .queryParam("page", page)
+                            .queryParam("include_adult", false)
+                            .queryParam("include_video", false);
+                    switch (collection) {
+                        case POPULAR -> builder
+                                .queryParam("sort_by", "popularity.desc")
+                                .queryParam("vote_count.gte", 100);
+                        case TOP_RATED -> builder
+                                .queryParam("sort_by", "vote_average.desc")
+                                .queryParam("vote_count.gte", 500);
+                        case ESTABLISHED -> builder
+                                .queryParam("sort_by", "popularity.desc")
+                                .queryParam("vote_count.gte", 100)
+                                .queryParam("primary_release_date.lte", LocalDate.now().minusYears(2));
+                        case RECENT -> builder
+                                .queryParam("sort_by", "primary_release_date.desc")
+                                .queryParam("primary_release_date.lte", LocalDate.now());
+                    }
+                    return builder.build();
+                })
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + properties.apiToken())
+                .retrieve()
+                .body(TmdbMoviePage.class);
+        return map(request);
     }
 
     @Override
