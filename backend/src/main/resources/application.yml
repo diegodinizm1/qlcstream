@@ -26,5 +26,12 @@ qlc-stream:
   tmdb:
     base-url: https://api.themoviedb.org/3
     api-token: ${TMDB_API_TOKEN:}
+  prowlarr:
+    base-url: ${PROWLARR_BASE_URL:}
+    api-key: ${PROWLARR_API_KEY:}
+  qbittorrent:
+    base-url: ${QBITTORRENT_BASE_URL:}
+    username: ${QBITTORRENT_USERNAME:}
+    password: ${QBITTORRENT_PASSWORD:}
   storage:
     media-root: ${MEDIA_ROOT:./data/media}
