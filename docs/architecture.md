@@ -18,7 +18,7 @@ flowchart LR
     API --> DISK
 ```
 
-Na primeira entrega, o Compose sobe Angular, Spring Boot e PostgreSQL. Prowlarr e qBittorrent serão acrescentados junto das integrações, evitando publicar interfaces administrativas antes de definir credenciais e volumes.
+O Compose sobe Angular, Spring Boot, PostgreSQL, Prowlarr e qBittorrent. As interfaces administrativas de Prowlarr e qBittorrent são vinculadas a `localhost`.
 
 ## Módulos do backend
 
@@ -64,6 +64,10 @@ O fluxo consulta o `MovieMetadataProvider`, converte a resposta externa para o m
 - Caminhos locais persistidos como raiz cadastrada mais caminho relativo.
 - Estado operacional consultado no qBittorrent e estado histórico persistido no PostgreSQL.
 - HTTP para consultas e comandos; SSE para atualizações de downloads ativos.
+
+## qBittorrent no ambiente local
+
+O qBittorrent usa a imagem oficial e persiste sua configuração em `data/qbittorrent-official`. Em instalações Docker Desktop, mantenha `WebUI\HostHeaderValidation=false` na seção `[Preferences]` de `qBittorrent.conf`. O contêiner deve estar parado antes de editar esse arquivo, pois ele é regravado ao encerrar. Esse ajuste permite acessar a WebUI pela porta local publicada pelo Compose.
 
 ## Sequência incremental
 
