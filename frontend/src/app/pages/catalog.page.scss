@@ -44,6 +44,7 @@
 .movie-card:hover .poster-add, .movie-card:focus-within .poster-add { opacity: 1; transform: translateY(0); }.poster-add:hover { border-color: var(--accent); color: #06251f; background: var(--accent); }.poster-add:disabled { cursor: default; opacity: 1; transform: translateY(0); }.poster-add:disabled:has(.ph-check) { border-color: var(--accent); color: #06251f; background: var(--accent); }
 .movie-title-row { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-top: 10px; }
 .movie-card h3 { overflow: hidden; margin: 0; font-size: 14px; letter-spacing: -.015em; text-overflow: ellipsis; white-space: nowrap; }
+.movie-card h3 .original-title { margin-right: 5px; color: var(--muted); font-size: .68em; font-weight: 500; letter-spacing: 0; }
 .movie-title-row > span { flex: none; color: var(--muted); font: 11px var(--mono); }
 .movie-title-row i { margin-right: 3px; color: var(--warning); }
 .movie-card > p { margin: 5px 0 0; color: var(--quiet); font-size: 11px; }

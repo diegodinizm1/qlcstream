@@ -93,8 +93,8 @@ import { LibraryApiService } from '../core/library-api.service';
                           <img [src]="posterUrl(movie)" [alt]="'Pôster de ' + movie.title" loading="lazy" decoding="async" (error)="hidePoster(movie)" />
                         } @else { <span class="poster-placeholder"><i class="ph ph-film-strip"></i></span> }
                       </div>
-                      <div class="movie-title-row"><h3>{{ movie.title }}</h3><span><i class="ph-fill ph-star"></i>{{ rating(movie) }}</span></div>
-                      <p>{{ year(movie) }} @if (movie.originalTitle && movie.originalTitle !== movie.title) { <span>{{ movie.originalTitle }}</span> }</p>
+                      <div class="movie-title-row"><h3>{{ movie.title }}@if (movie.originalTitle && movie.originalTitle !== movie.title) { <small class="original-title">({{ movie.originalTitle }})</small> }</h3><span><i class="ph-fill ph-star"></i>{{ rating(movie) }}</span></div>
+                      <p>{{ year(movie) }}</p>
                     </a>
                     <button class="poster-favorite" type="button" [class.active]="favoriteMovieIds().has(movie.tmdbId)" [attr.aria-label]="favoriteMovieIds().has(movie.tmdbId) ? 'Remover ' + movie.title + ' dos favoritos' : 'Favoritar ' + movie.title" (click)="toggleFavorite(movie)"><i class="ph" [class.ph-heart-fill]="favoriteMovieIds().has(movie.tmdbId)" [class.ph-heart]="!favoriteMovieIds().has(movie.tmdbId)"></i></button><button class="poster-add" type="button" [disabled]="addingMovieIds().has(movie.tmdbId) || addedMovieIds().has(movie.tmdbId)" [attr.aria-label]="addedMovieIds().has(movie.tmdbId) ? movie.title + ' já está na biblioteca' : 'Adicionar ' + movie.title + ' à biblioteca'" (click)="addToLibrary(movie)"><i class="ph" [class.ph-plus]="!addedMovieIds().has(movie.tmdbId)" [class.ph-check]="addedMovieIds().has(movie.tmdbId)"></i></button>
                   </article>

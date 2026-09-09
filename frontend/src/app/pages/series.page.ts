@@ -173,15 +173,15 @@ type Sort = 'POPULARITY' | 'RATING' | 'NEWEST' | 'OLDEST' | 'TITLE';
                         }
                       </div>
                       <div class="movie-title-row">
-                        <h3>{{ series.name }}</h3>
+                        <h3>
+                          {{ series.name }}
+                          @if (series.originalName && series.originalName !== series.name) {
+                            <small class="original-title">({{ series.originalName }})</small>
+                          }
+                        </h3>
                         <span><i class="ph-fill ph-star"></i>{{ rating(series) }}</span>
                       </div>
-                      <p>
-                        {{ year(series) }}
-                        @if (series.originalName && series.originalName !== series.name) {
-                          <span>{{ series.originalName }}</span>
-                        }
-                      </p></a
+                      <p>{{ year(series) }}</p></a
                     ><button
                       class="poster-favorite"
                       type="button"
@@ -247,6 +247,7 @@ export class SeriesPage {
   private readonly queryChanges = new Subject<string>();
   private activeRequest?: Subscription;
   private spotlightTimer?: ReturnType<typeof setInterval>;
+  private requestVersion = 0;
   readonly filters: ReadonlyArray<{ id: SeriesFilter; label: string }> = [
     { id: 'ESTABLISHED', label: 'Em alta' },
     { id: 'POPULAR', label: 'Populares' },
@@ -268,6 +269,7 @@ export class SeriesPage {
   readonly currentPage = signal(1);
   readonly loadingMoreSeries = signal(false);
   readonly hasMoreSeries = signal(true);
+  readonly sortTouched = signal(false);
   readonly sortBy = signal<Sort>('POPULARITY');
   readonly spotlightIndex = signal(0);
   readonly sectionTitle = computed(() =>
@@ -289,14 +291,8 @@ export class SeriesPage {
   );
   readonly displayedSeries = computed(() => {
     const values = [...this.series()];
-    const filter = this.activeFilter();
-    const initialSort: Sort =
-      filter === 'TOP_RATED' ? 'RATING' : filter === 'RECENT' ? 'NEWEST' : 'POPULARITY';
-    const sort = this.lastSubmittedQuery()
-      ? this.sortBy()
-      : this.sortBy() === 'POPULARITY'
-        ? initialSort
-        : this.sortBy();
+    if (!this.sortTouched()) return values;
+    const sort = this.sortBy();
     switch (sort) {
       case 'RATING':
         return values.sort((a, b) => (b.voteAverage ?? -1) - (a.voteAverage ?? -1));
@@ -372,11 +368,13 @@ export class SeriesPage {
     this.unavailablePosterIds.update((ids) => new Set(ids).add(item.tmdbId));
   }
   setSort(event: Event): void {
+    this.sortTouched.set(true);
     this.sortBy.set((event.target as HTMLSelectElement).value as Sort);
   }
   loadMore(): void {
     if (this.loadingMoreSeries() || !this.hasMoreSeries()) return;
     const nextPage = this.currentPage() + 1;
+    const requestVersion = this.requestVersion;
     const query = this.lastSubmittedQuery();
     const request = query
       ? this.api.searchSeries(query, 'pt-BR', nextPage)
@@ -384,12 +382,18 @@ export class SeriesPage {
     this.loadingMoreSeries.set(true);
     request.pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
       next: (values) => {
-        this.series.update((current) => [...current, ...values]);
+        if (requestVersion !== this.requestVersion) return;
+        this.series.update((current) => {
+          const existingIds = new Set(current.map((item) => item.tmdbId));
+          return [...current, ...values.filter((item) => !existingIds.has(item.tmdbId))];
+        });
         this.currentPage.set(nextPage);
         this.hasMoreSeries.set(values.length >= 20);
         this.loadingMoreSeries.set(false);
       },
-      error: () => this.loadingMoreSeries.set(false),
+      error: () => {
+        if (requestVersion === this.requestVersion) this.loadingMoreSeries.set(false);
+      },
     });
   }
   private resetSpotlightTimer(): void {
@@ -474,16 +478,19 @@ export class SeriesPage {
     this.load(this.api.trendingSeries());
   }
   private load(request: Observable<CatalogSeries[]>): void {
+    const requestVersion = ++this.requestVersion;
     this.activeRequest?.unsubscribe();
     this.viewState.set('loading');
     this.unavailablePosterIds.set(new Set());
     this.activeRequest = request.pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
       next: (values) => {
-        this.series.set(values);
+        if (requestVersion !== this.requestVersion) return;
+        this.series.set(this.uniqueSeries(values));
         this.spotlightIndex.set(0);
         this.currentPage.set(1);
         this.hasMoreSeries.set(values.length >= 20);
         this.loadingMoreSeries.set(false);
+        this.sortTouched.set(false);
         this.viewState.set('ready');
         this.libraryApi
           .plannedSeries()
@@ -504,6 +511,7 @@ export class SeriesPage {
           });
       },
       error: () => {
+        if (requestVersion !== this.requestVersion) return;
         this.series.set([]);
         this.errorMessage.set(
           'O catálogo não respondeu como esperado. Tente novamente em instantes.',
@@ -511,5 +519,10 @@ export class SeriesPage {
         this.viewState.set('error');
       },
     });
+  }
+
+  private uniqueSeries(values: CatalogSeries[]): CatalogSeries[] {
+    const seen = new Set<number>();
+    return values.filter((item) => !seen.has(item.tmdbId) && seen.add(item.tmdbId));
   }
 }
