@@ -4,6 +4,7 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 
 import { CatalogApiService, MovieDetails } from '../core/catalog-api.service';
+import { DownloadsApiService } from '../core/downloads-api.service';
 import { ReleaseOption, ReleasesApiService } from '../core/releases-api.service';
 
 @Component({
@@ -44,7 +45,7 @@ import { ReleaseOption, ReleasesApiService } from '../core/releases-api.service'
               </article>
             </div>
           </main>
-          @if (showReleases()) { <div class="release-overlay" role="presentation" (click)="closeReleases()"><section class="release-modal" role="dialog" aria-modal="true" aria-labelledby="release-title" (click)="$event.stopPropagation()"><header><div><p>FONTES DISPONÍVEIS</p><h2 id="release-title">{{ details.title }}</h2></div><button class="icon-button" type="button" aria-label="Fechar" (click)="closeReleases()"><i class="ph ph-x"></i></button></header>@if (releaseState() === 'loading') { <div class="release-state"><i class="ph ph-spinner-gap"></i>Buscando opções no Prowlarr.</div> } @else if (releaseState() === 'error') { <div class="release-state error">Não foi possível buscar opções. Confira o Prowlarr e tente novamente.</div> } @else if (!releases().length) { <div class="release-state">Nenhuma opção encontrada para este título.</div> } @else { <div class="release-list">@for (release of releases(); track release.downloadUrl + release.title) { <article><div><strong>{{ release.title }}</strong><p>{{ release.indexer || 'Indexador' }} · {{ release.seeders ?? 0 }} seeders · {{ size(release.size) }}</p></div><a class="btn btn-quiet" [href]="release.infoUrl || release.downloadUrl" target="_blank" rel="noreferrer">Ver fonte</a></article> }</div> }</section></div> }
+          @if (showReleases()) { <div class="release-overlay" role="presentation" (click)="closeReleases()"><section class="release-modal" role="dialog" aria-modal="true" aria-labelledby="release-title" (click)="$event.stopPropagation()"><header><div><p>FONTES DISPONÍVEIS</p><h2 id="release-title">{{ details.title }}</h2></div><button class="icon-button" type="button" aria-label="Fechar" (click)="closeReleases()"><i class="ph ph-x"></i></button></header>@if (submissionMessage()) { <p class="submission-message">{{ submissionMessage() }}</p> } @if (releaseState() === 'loading') { <div class="release-state"><i class="ph ph-spinner-gap"></i>Buscando opções no Prowlarr.</div> } @else if (releaseState() === 'error') { <div class="release-state error">Não foi possível buscar opções. Confira o Prowlarr e tente novamente.</div> } @else if (!releases().length) { <div class="release-state">Nenhuma opção encontrada para este título.</div> } @else { <div class="release-list">@for (release of releases(); track release.downloadUrl + release.title) { <article><div><strong>{{ release.title }}</strong><p>{{ release.indexer || 'Indexador' }} · {{ release.seeders ?? 0 }} seeders · {{ size(release.size) }}</p></div><div class="release-actions"><a class="btn btn-quiet" [href]="release.infoUrl || release.downloadUrl" target="_blank" rel="noreferrer">Ver fonte</a><button class="btn btn-primary" type="button" [disabled]="submittingRelease() === release.downloadUrl || !release.downloadUrl" (click)="enqueue(details, release)">@if (submittingRelease() === release.downloadUrl) { Enviando… } @else { Baixar }</button></div></article> }</div> }</section></div> }
         }
       }
     }
@@ -55,6 +56,7 @@ export class MovieDetailsPage {
   private readonly route = inject(ActivatedRoute);
   private readonly destroyRef = inject(DestroyRef);
   private readonly releasesApi = inject(ReleasesApiService);
+  private readonly downloadsApi = inject(DownloadsApiService);
 
   readonly state = signal<'loading' | 'ready' | 'error'>('loading');
   readonly movie = signal<MovieDetails | null>(null);
@@ -62,6 +64,8 @@ export class MovieDetailsPage {
   readonly showReleases = signal(false);
   readonly releaseState = signal<'loading' | 'ready' | 'error'>('ready');
   readonly releases = signal<ReleaseOption[]>([]);
+  readonly submittingRelease = signal<string | null>(null);
+  readonly submissionMessage = signal<string | null>(null);
 
   constructor() {
     this.route.paramMap.pipe(takeUntilDestroyed(this.destroyRef)).subscribe((params) => {
@@ -94,9 +98,19 @@ export class MovieDetailsPage {
   rating(movie: MovieDetails): string {
     return movie.voteAverage == null ? 'N/D' : movie.voteAverage.toFixed(1);
   }
-  openReleases(movie: MovieDetails): void { this.showReleases.set(true); this.releaseState.set('loading'); const query = `${movie.originalTitle || movie.title} ${this.year(movie)}`; this.releasesApi.search(query, this.year(movie)).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({ next: (releases) => { this.releases.set(releases); this.releaseState.set('ready'); }, error: () => this.releaseState.set('error') }); }
+  openReleases(movie: MovieDetails): void { this.showReleases.set(true); this.releaseState.set('loading'); this.submissionMessage.set(null); const query = `${movie.originalTitle || movie.title} ${this.year(movie)}`; this.releasesApi.search(query, this.year(movie)).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({ next: (releases) => { this.releases.set(releases); this.releaseState.set('ready'); }, error: () => this.releaseState.set('error') }); }
   closeReleases(): void { this.showReleases.set(false); }
   size(bytes: number | null): string { return bytes ? `${(bytes / 1_000_000_000).toFixed(1)} GB` : 'Tamanho não informado'; }
+  enqueue(movie: MovieDetails, release: ReleaseOption): void {
+    if (!release.downloadUrl) return;
+    this.submittingRelease.set(release.downloadUrl);
+    this.submissionMessage.set(null);
+    const title = release.title.toLowerCase();
+    const resolution = title.includes('2160p') ? 2160 : title.includes('1080p') ? 1080 : title.includes('720p') ? 720 : null;
+    const source = title.includes('web-dl') ? 'WEB-DL' : title.includes('webrip') ? 'WEBRip' : title.includes('bluray') ? 'BluRay' : null;
+    const dynamicRange = title.includes('hdr') ? 'HDR' : null;
+    this.downloadsApi.enqueue({ movieTmdbId: movie.tmdbId, releaseTitle: release.title, acquisitionRef: release.downloadUrl, indexerName: release.indexer, resolutionHeight: resolution, sourceType: source, dynamicRange }).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({ next: () => { this.submissionMessage.set('Enviado ao qBittorrent. Acompanhe o andamento em Downloads.'); this.submittingRelease.set(null); }, error: () => { this.submissionMessage.set('Não foi possível enviar esta fonte ao qBittorrent.'); this.submittingRelease.set(null); } });
+  }
 
   private load(tmdbId: number): void {
     this.state.set('loading');

@@ -20,11 +20,30 @@ export interface DownloadSummary {
   createdAt: string;
 }
 
+export interface CreateDownloadRequest {
+  movieTmdbId: number;
+  releaseTitle: string;
+  acquisitionRef: string;
+  indexerName: string | null;
+  resolutionHeight: number | null;
+  sourceType: string | null;
+  dynamicRange: string | null;
+}
+
+export interface SubmittedDownload {
+  id: string;
+  status: string;
+}
+
 @Injectable({ providedIn: 'root' })
 export class DownloadsApiService {
   private readonly http = inject(HttpClient);
 
   active(): Observable<DownloadSummary[]> {
     return this.http.get<DownloadSummary[]>('/api/downloads');
+  }
+
+  enqueue(request: CreateDownloadRequest): Observable<SubmittedDownload> {
+    return this.http.post<SubmittedDownload>('/api/downloads', request);
   }
 }

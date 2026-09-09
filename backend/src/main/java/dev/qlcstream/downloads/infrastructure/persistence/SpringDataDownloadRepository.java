@@ -5,9 +5,12 @@ import java.util.List;
 import java.util.UUID;
 
 import org.springframework.data.jpa.repository.Query;
-import org.springframework.data.repository.Repository;
+import org.springframework.data.repository.CrudRepository;
 
-interface SpringDataDownloadRepository extends Repository<DownloadRow, UUID> {
+public interface SpringDataDownloadRepository extends CrudRepository<DownloadRow, UUID> {
+
+    @Query(value = "SELECT id FROM movie WHERE tmdb_id = :tmdbId", nativeQuery = true)
+    Long findMovieIdByTmdbId(long tmdbId);
 
     @Query(value = """
             SELECT d.id, m.tmdb_id AS movie_tmdb_id, m.title AS movie_title, m.poster_path,
