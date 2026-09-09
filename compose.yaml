@@ -61,15 +61,13 @@ services:
     restart: unless-stopped
 
   qbittorrent:
-    image: lscr.io/linuxserver/qbittorrent:latest
+    image: qbittorrentofficial/qbittorrent-nox:latest
     environment:
-      PUID: 1000
-      PGID: 1000
-      TZ: America/Fortaleza
-      WEBUI_PORT: 8080
-      TORRENTING_PORT: 6881
+      QBT_LEGAL_NOTICE: confirm
+      QBT_WEBUI_PORT: 8080
+      QBT_TORRENTING_PORT: 6881
     volumes:
-      - ./data/qbittorrent:/config
+      - ./data/qbittorrent-official:/config
       - ${MEDIA_HOST_PATH:-./data/media}:/downloads
     ports:
       - "127.0.0.1:8081:8080"
