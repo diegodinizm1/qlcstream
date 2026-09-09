@@ -2,9 +2,10 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { ChangeDetectionStrategy, Component, DestroyRef, computed, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
-import { Observable, Subscription } from 'rxjs';
+import { Observable, Subject, Subscription, debounceTime, distinctUntilChanged } from 'rxjs';
 
 import { CatalogApiService, CatalogCollection, CatalogMovie } from '../core/catalog-api.service';
+import { LibraryApiService } from '../core/library-api.service';
 
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -51,7 +52,7 @@ import { CatalogApiService, CatalogCollection, CatalogMovie } from '../core/cata
       <section aria-labelledby="popular-title">
         <div class="section-heading">
           <h2 id="popular-title">{{ sectionTitle() }}</h2>
-          <span class="catalog-count">{{ movies().length }} filmes</span>
+          <div class="catalog-tools"><span class="catalog-count">{{ displayedMovies().length }} filmes</span><label class="catalog-sort"><span>Ordenar</span><select [value]="sortBy()" (change)="setSort($event)"><option value="POPULARITY">Popularidade</option><option value="RATING">Melhor nota</option><option value="NEWEST">Lançamentos recentes</option><option value="OLDEST">Ano mais antigo</option><option value="TITLE">Título A-Z</option></select></label></div>
         </div>
 
         @switch (viewState()) {
@@ -70,9 +71,9 @@ import { CatalogApiService, CatalogCollection, CatalogMovie } from '../core/cata
             </div>
           }
           @default {
-            @if (movies().length) {
+            @if (displayedMovies().length) {
               <div class="poster-grid">
-                @for (movie of movies(); track movie.tmdbId; let index = $index) {
+                @for (movie of displayedMovies(); track movie.tmdbId; let index = $index) {
                   <article class="movie-card" [style.--delay]="index * 45 + 'ms'">
                     <a class="movie-link" [routerLink]="['/catalog', movie.tmdbId]" [attr.aria-label]="'Abrir detalhes de ' + movie.title">
                       <div class="poster">
@@ -83,6 +84,7 @@ import { CatalogApiService, CatalogCollection, CatalogMovie } from '../core/cata
                       <div class="movie-title-row"><h3>{{ movie.title }}</h3><span><i class="ph-fill ph-star"></i>{{ rating(movie) }}</span></div>
                       <p>{{ year(movie) }} @if (movie.originalTitle && movie.originalTitle !== movie.title) { <span>{{ movie.originalTitle }}</span> }</p>
                     </a>
+                    <button class="poster-favorite" type="button" [class.active]="favoriteMovieIds().has(movie.tmdbId)" [attr.aria-label]="favoriteMovieIds().has(movie.tmdbId) ? 'Remover ' + movie.title + ' dos favoritos' : 'Favoritar ' + movie.title" (click)="toggleFavorite(movie)"><i class="ph" [class.ph-heart-fill]="favoriteMovieIds().has(movie.tmdbId)" [class.ph-heart]="!favoriteMovieIds().has(movie.tmdbId)"></i></button><button class="poster-add" type="button" [disabled]="addingMovieIds().has(movie.tmdbId) || addedMovieIds().has(movie.tmdbId)" [attr.aria-label]="addedMovieIds().has(movie.tmdbId) ? movie.title + ' já está na biblioteca' : 'Adicionar ' + movie.title + ' à biblioteca'" (click)="addToLibrary(movie)"><i class="ph" [class.ph-plus]="!addedMovieIds().has(movie.tmdbId)" [class.ph-check]="addedMovieIds().has(movie.tmdbId)"></i></button>
                   </article>
                 }
               </div>
@@ -100,10 +102,12 @@ import { CatalogApiService, CatalogCollection, CatalogMovie } from '../core/cata
 })
 export class CatalogPage {
   private readonly catalogApi = inject(CatalogApiService);
+  private readonly libraryApi = inject(LibraryApiService);
   private readonly destroyRef = inject(DestroyRef);
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
   private activeRequest?: Subscription;
+  private readonly queryChanges = new Subject<string>();
 
   readonly filters: ReadonlyArray<{ collection: CatalogCollection; label: string }> = [
     { collection: 'ESTABLISHED', label: 'Catálogo consolidado' },
@@ -120,6 +124,10 @@ export class CatalogPage {
   readonly lastSubmittedQuery = signal('');
   readonly movies = signal<CatalogMovie[]>([]);
   readonly unavailablePosterIds = signal<ReadonlySet<number>>(new Set());
+  readonly addingMovieIds = signal<ReadonlySet<number>>(new Set());
+  readonly addedMovieIds = signal<ReadonlySet<number>>(new Set());
+  readonly favoriteMovieIds = signal<ReadonlySet<number>>(new Set());
+  readonly sortBy = signal<'POPULARITY' | 'RATING' | 'NEWEST' | 'OLDEST' | 'TITLE'>('POPULARITY');
   readonly sectionTitle = computed(() => {
     if (this.lastSubmittedQuery()) {
       return `Resultados para “${this.lastSubmittedQuery()}”`;
@@ -127,8 +135,26 @@ export class CatalogPage {
     return this.filters.find((filter) => filter.collection === this.activeFilter())?.label ?? 'Catálogo';
   });
   readonly spotlightMovie = computed(() => this.movies().find((movie) => Boolean(movie.backdropPath)) ?? this.movies()[0]);
+  readonly displayedMovies = computed(() => {
+    const movies = [...this.movies()];
+    switch (this.sortBy()) {
+      case 'RATING': return movies.sort((a, b) => (b.voteAverage ?? -1) - (a.voteAverage ?? -1));
+      case 'NEWEST': return movies.sort((a, b) => (b.releaseDate ?? '').localeCompare(a.releaseDate ?? ''));
+      case 'OLDEST': return movies.sort((a, b) => (a.releaseDate ?? '9999').localeCompare(b.releaseDate ?? '9999'));
+      case 'TITLE': return movies.sort((a, b) => a.title.localeCompare(b.title, 'pt-BR'));
+      default: return movies.sort((a, b) => (b.popularity ?? -1) - (a.popularity ?? -1));
+    }
+  });
 
   constructor() {
+    this.queryChanges.pipe(
+      debounceTime(260),
+      distinctUntilChanged(),
+      takeUntilDestroyed(this.destroyRef),
+    ).subscribe((query) => {
+      this.lastSubmittedQuery.set(query);
+      this.load(query ? this.catalogApi.search(query) : this.catalogApi.discover(this.activeFilter()));
+    });
     this.route.queryParamMap.pipe(takeUntilDestroyed(this.destroyRef)).subscribe((params) => {
       const query = params.get('q')?.trim() ?? '';
       this.query.set(query);
@@ -142,7 +168,9 @@ export class CatalogPage {
   }
 
   onQuery(event: Event): void {
-    this.query.set((event.target as HTMLInputElement).value);
+    const query = (event.target as HTMLInputElement).value;
+    this.query.set(query);
+    this.queryChanges.next(query.trim());
   }
 
   search(): void {
@@ -205,6 +233,28 @@ export class CatalogPage {
     return movie.voteAverage == null ? 'N/D' : movie.voteAverage.toFixed(1);
   }
 
+  setSort(event: Event): void {
+    this.sortBy.set((event.target as HTMLSelectElement).value as typeof this.sortBy extends () => infer T ? T : never);
+  }
+
+  addToLibrary(movie: CatalogMovie): void {
+    if (this.addingMovieIds().has(movie.tmdbId) || this.addedMovieIds().has(movie.tmdbId)) return;
+    this.addingMovieIds.update((ids) => new Set(ids).add(movie.tmdbId));
+    this.libraryApi.addPlanned(movie.tmdbId).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
+      next: () => {
+        this.addingMovieIds.update((ids) => { const next = new Set(ids); next.delete(movie.tmdbId); return next; });
+        this.addedMovieIds.update((ids) => new Set(ids).add(movie.tmdbId));
+      },
+      error: () => this.addingMovieIds.update((ids) => { const next = new Set(ids); next.delete(movie.tmdbId); return next; }),
+    });
+  }
+
+  toggleFavorite(movie: CatalogMovie): void {
+    const favorite = this.favoriteMovieIds().has(movie.tmdbId);
+    const request = favorite ? this.libraryApi.removeFavorite('MOVIE', movie.tmdbId) : this.libraryApi.addFavorite('MOVIE', movie.tmdbId, { title: movie.title, posterPath: movie.posterPath, subtitle: this.year(movie).toString() });
+    request.pipe(takeUntilDestroyed(this.destroyRef)).subscribe({ next: () => this.favoriteMovieIds.update((ids) => { const next = new Set(ids); favorite ? next.delete(movie.tmdbId) : next.add(movie.tmdbId); return next; }) });
+  }
+
   private loadTrending(): void {
     this.lastSubmittedQuery.set('');
     this.loadCollection();
@@ -223,6 +273,10 @@ export class CatalogPage {
       next: (movies) => {
         this.movies.set(movies);
         this.viewState.set('ready');
+        this.libraryApi.movieIds().pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
+          next: (ids) => this.addedMovieIds.set(new Set(ids)),
+        });
+        this.libraryApi.favorites().pipe(takeUntilDestroyed(this.destroyRef)).subscribe({ next: (items) => this.favoriteMovieIds.set(new Set(items.filter((item) => item.mediaType === 'MOVIE').map((item) => item.tmdbId))) });
       },
       error: (error: unknown) => {
         this.movies.set([]);

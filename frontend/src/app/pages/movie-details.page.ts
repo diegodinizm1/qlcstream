@@ -1,11 +1,15 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { ChangeDetectionStrategy, Component, DestroyRef, inject, signal } from '@angular/core';
+import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 
-import { CatalogApiService, MovieDetails } from '../core/catalog-api.service';
+import { CatalogApiService, CatalogMovie, MovieDetails } from '../core/catalog-api.service';
 import { DownloadsApiService } from '../core/downloads-api.service';
+import { LibraryApiService } from '../core/library-api.service';
 import { ReleaseOption, ReleasesApiService } from '../core/releases-api.service';
+import { DesktopFileService } from '../core/desktop-file.service';
+import { isDesktopApp } from '../core/api-url';
 
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -40,12 +44,18 @@ import { ReleaseOption, ReleasesApiService } from '../core/releases-api.service'
                 @if (details.originalTitle && details.originalTitle !== details.title) { <p class="original-title">{{ details.originalTitle }}</p> }
                 @if (details.tagline) { <p class="tagline">{{ details.tagline }}</p> }
                 @if (details.genres.length) { <ul class="genre-list" aria-label="Gêneros">@for (genre of details.genres; track genre) { <li>{{ genre }}</li> }</ul> }
-                <button class="btn btn-primary release-button" type="button" (click)="openReleases(details)"><i class="ph ph-download-simple"></i>Opções de download</button>
+                <div class="detail-actions"><button class="btn btn-primary release-button" type="button" (click)="openReleases(details)"><i class="ph ph-download-simple"></i>Opções de download</button><button class="btn btn-quiet library-button" type="button" [disabled]="libraryAction() === 'adding' || libraryAction() === 'added'" (click)="addToLibrary(details)"><i class="ph" [class.ph-bookmark-simple]="libraryAction() !== 'added'" [class.ph-check]="libraryAction() === 'added'"></i>{{ libraryAction() === 'added' ? 'Na minha lista' : libraryAction() === 'adding' ? 'Adicionando' : 'Adicionar à biblioteca' }}</button><button class="btn btn-quiet library-button favorite-detail" type="button" (click)="toggleFavorite(details)"><i class="ph" [class.ph-heart-fill]="isFavorite()" [class.ph-heart]="!isFavorite()"></i>{{ isFavorite() ? 'Favorito' : 'Favoritar' }}</button></div>
                 <section class="overview" aria-labelledby="overview-title"><h2 id="overview-title">Sinopse</h2><p>{{ details.overview || 'Sinopse ainda não disponível.' }}</p></section>
               </article>
             </div>
+            <div class="details-extra">
+              @if (details.director || details.writers.length) { <section class="credits-section" aria-labelledby="credits-title"><h2 id="credits-title">Ficha técnica</h2><dl>@if (details.director) { <div><dt>Direção</dt><dd>{{ details.director }}</dd></div> } @if (details.writers.length) { <div><dt>Roteiro</dt><dd>{{ details.writers.join(', ') }}</dd></div> }</dl></section> }
+              @if (details.trailerUrl; as trailerUrl) { <section class="trailer-section" aria-labelledby="trailer-title"><div class="trailer-heading"><h2 id="trailer-title">Trailer</h2><a [href]="trailerUrl" target="_blank" rel="noreferrer" (click)="openTrailer($event, trailerUrl)">Abrir no YouTube <i class="ph ph-arrow-up-right"></i></a></div><div class="trailer-player"><iframe [src]="trailerEmbedUrl(trailerUrl)" [title]="'Trailer de ' + details.title" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe></div></section> }
+              @if (details.cast.length) { <section class="cast-section" aria-labelledby="cast-title"><h2 id="cast-title">Elenco principal</h2><div class="cast-list">@for (member of details.cast; track member.tmdbId) { <a class="cast-member" [routerLink]="['/people', member.tmdbId]" [attr.aria-label]="'Ver detalhes de ' + member.name">@if (member.profilePath) { <img [src]="profileUrl(member.profilePath)" [alt]="member.name" /> } @else { <span><i class="ph ph-user"></i></span> }<div><strong>{{ member.name }}</strong>@if (member.character) { <small>{{ member.character }}</small> }</div></a> }</div></section> }
+              @if (details.recommendations.length) { <section class="recommendations-section" aria-labelledby="recommendations-title"><h2 id="recommendations-title">Você também pode gostar</h2><div class="recommendations-grid">@for (recommendation of details.recommendations; track recommendation.tmdbId) { <a [routerLink]="['/catalog', recommendation.tmdbId]">@if (recommendation.posterPath) { <img [src]="recommendationPosterUrl(recommendation)" [alt]="'Pôster de ' + recommendation.title" /> } @else { <span><i class="ph ph-film-strip"></i></span> }<strong>{{ recommendation.title }}</strong><small>{{ year(recommendation) }}</small></a> }</div></section> }
+            </div>
           </main>
-          @if (showReleases()) { <div class="release-overlay" role="presentation" (click)="closeReleases()"><section class="release-modal" role="dialog" aria-modal="true" aria-labelledby="release-title" (click)="$event.stopPropagation()"><header><div><p>FONTES DISPONÍVEIS</p><h2 id="release-title">{{ details.title }}</h2></div><button class="icon-button" type="button" aria-label="Fechar" (click)="closeReleases()"><i class="ph ph-x"></i></button></header>@if (submissionMessage()) { <p class="submission-message">{{ submissionMessage() }}</p> } @if (releaseState() === 'loading') { <div class="release-state"><i class="ph ph-spinner-gap"></i>Buscando opções no Prowlarr.</div> } @else if (releaseState() === 'error') { <div class="release-state error">Não foi possível buscar opções. Confira o Prowlarr e tente novamente.</div> } @else if (!releases().length) { <div class="release-state">Nenhuma opção encontrada para este título.</div> } @else { <div class="release-list">@for (release of releases(); track releaseKey(release)) { <article><div><strong>{{ release.title }}</strong><p>{{ release.indexer || 'Indexador' }} · {{ release.seeders ?? 0 }} seeders · {{ size(release.size) }}</p></div><div class="release-actions"><a class="btn btn-quiet" [href]="release.infoUrl || acquisitionRef(release)" target="_blank" rel="noreferrer">Ver fonte</a><button class="btn btn-primary" type="button" [disabled]="!acquisitionRef(release) || submittingRelease() === acquisitionRef(release)" (click)="enqueue(details, release)">@if (submittingRelease() === acquisitionRef(release)) { Enviando… } @else { Baixar }</button></div></article> }</div> }</section></div> }
+          @if (showReleases()) { <div class="release-overlay" role="presentation" (click)="closeReleases()"><section class="release-modal" role="dialog" aria-modal="true" aria-labelledby="release-title" (click)="$event.stopPropagation()"><header><div><p>OPÇÕES DISPONÍVEIS</p><h2 id="release-title">{{ details.title }}</h2></div><button class="icon-button" type="button" aria-label="Fechar" (click)="closeReleases()"><i class="ph ph-x"></i></button></header>@if (submissionMessage()) { <p class="submission-message">{{ submissionMessage() }}</p> } @if (releaseState() === 'loading') { <div class="release-state"><i class="ph ph-spinner-gap"></i>Procurando opções para download.</div> } @else if (releaseState() === 'error') { <div class="release-state error">Não foi possível encontrar opções agora. Tente novamente.</div> } @else if (!releases().length) { <div class="release-state">Nenhuma opção encontrada para este título.</div> } @else { <div class="release-list">@for (release of releases(); track releaseKey(release)) { <article><div><strong>{{ release.title }}</strong><p>{{ release.indexer || 'Fonte' }} · {{ release.seeders ?? 0 }} pessoas compartilhando · {{ size(release.size) }}</p></div><div class="release-actions"><button class="btn btn-primary" type="button" [disabled]="!acquisitionRef(release) || submittingRelease() === acquisitionRef(release)" (click)="enqueue(details, release)">@if (submittingRelease() === acquisitionRef(release)) { Preparando… } @else { Baixar }</button></div></article> }</div> }</section></div> }
         }
       }
     }
@@ -57,6 +67,9 @@ export class MovieDetailsPage {
   private readonly destroyRef = inject(DestroyRef);
   private readonly releasesApi = inject(ReleasesApiService);
   private readonly downloadsApi = inject(DownloadsApiService);
+  private readonly libraryApi = inject(LibraryApiService);
+  private readonly sanitizer = inject(DomSanitizer);
+  private readonly desktopFile = inject(DesktopFileService);
 
   readonly state = signal<'loading' | 'ready' | 'error'>('loading');
   readonly movie = signal<MovieDetails | null>(null);
@@ -66,6 +79,8 @@ export class MovieDetailsPage {
   readonly releases = signal<ReleaseOption[]>([]);
   readonly submittingRelease = signal<string | null>(null);
   readonly submissionMessage = signal<string | null>(null);
+  readonly libraryAction = signal<'idle' | 'adding' | 'added'>('idle');
+  readonly isFavorite = signal(false);
 
   constructor() {
     this.route.paramMap.pipe(takeUntilDestroyed(this.destroyRef)).subscribe((params) => {
@@ -87,7 +102,22 @@ export class MovieDetailsPage {
     return movie.posterPath ? `https://image.tmdb.org/t/p/w500${movie.posterPath}` : '';
   }
 
-  year(movie: MovieDetails): string {
+  profileUrl(path: string): string { return `https://image.tmdb.org/t/p/w185${path}`; }
+
+  recommendationPosterUrl(movie: MovieDetails['recommendations'][number]): string { return movie.posterPath ? `https://image.tmdb.org/t/p/w342${movie.posterPath}` : ''; }
+
+  trailerEmbedUrl(trailerUrl: string): SafeResourceUrl {
+    const videoId = new URL(trailerUrl).searchParams.get('v');
+    return this.sanitizer.bypassSecurityTrustResourceUrl(`https://www.youtube-nocookie.com/embed/${videoId ?? ''}?rel=0&cc_lang_pref=pt-BR&cc_load_policy=1`);
+  }
+
+  openTrailer(event: MouseEvent, trailerUrl: string): void {
+    if (!isDesktopApp()) return;
+    event.preventDefault();
+    void this.desktopFile.openExternalUrl(trailerUrl);
+  }
+
+  year(movie: CatalogMovie): string {
     return movie.releaseDate ? movie.releaseDate.slice(0, 4) : 'Sem data';
   }
 
@@ -110,8 +140,16 @@ export class MovieDetailsPage {
     const resolution = title.includes('2160p') ? 2160 : title.includes('1080p') ? 1080 : title.includes('720p') ? 720 : null;
     const source = title.includes('web-dl') ? 'WEB-DL' : title.includes('webrip') ? 'WEBRip' : title.includes('bluray') ? 'BluRay' : null;
     const dynamicRange = title.includes('hdr') ? 'HDR' : null;
-    this.downloadsApi.enqueue({ movieTmdbId: movie.tmdbId, releaseTitle: release.title, acquisitionRef, indexerName: release.indexer, resolutionHeight: resolution, sourceType: source, dynamicRange }).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({ next: () => { this.submissionMessage.set('Enviado ao qBittorrent. Acompanhe o andamento em Downloads.'); this.submittingRelease.set(null); }, error: () => { this.submissionMessage.set('Não foi possível enviar esta fonte ao qBittorrent.'); this.submittingRelease.set(null); } });
+    this.downloadsApi.enqueue({ movieTmdbId: movie.tmdbId, releaseTitle: release.title, acquisitionRef, indexerName: release.indexer, resolutionHeight: resolution, sourceType: source, dynamicRange }).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({ next: () => { this.submissionMessage.set('Download adicionado. Acompanhe o andamento em Downloads.'); this.submittingRelease.set(null); }, error: () => { this.submissionMessage.set('Não foi possível iniciar este download. Tente outra opção.'); this.submittingRelease.set(null); } });
   }
+  addToLibrary(movie: MovieDetails): void {
+    this.libraryAction.set('adding');
+    this.libraryApi.addPlanned(movie.tmdbId).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
+      next: () => this.libraryAction.set('added'),
+      error: () => this.libraryAction.set('idle'),
+    });
+  }
+  toggleFavorite(movie: MovieDetails): void { const favorite = this.isFavorite(); const request = favorite ? this.libraryApi.removeFavorite('MOVIE', movie.tmdbId) : this.libraryApi.addFavorite('MOVIE', movie.tmdbId, { title: movie.title, posterPath: movie.posterPath, subtitle: this.year(movie) }); request.pipe(takeUntilDestroyed(this.destroyRef)).subscribe({ next: () => this.isFavorite.set(!favorite) }); }
   acquisitionRef(release: ReleaseOption): string { return release.magnetUrl || release.downloadUrl || ''; }
   releaseKey(release: ReleaseOption): string { return this.acquisitionRef(release) || release.infoUrl || release.title; }
 
@@ -121,6 +159,10 @@ export class MovieDetailsPage {
       next: (details) => {
         this.movie.set(details);
         this.state.set('ready');
+        this.libraryApi.isPlanned(tmdbId).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
+          next: (status) => this.libraryAction.set(status.planned ? 'added' : 'idle'),
+        });
+        this.libraryApi.favorites().pipe(takeUntilDestroyed(this.destroyRef)).subscribe({ next: (items) => this.isFavorite.set(items.some((item) => item.mediaType === 'MOVIE' && item.tmdbId === tmdbId)) });
       },
       error: (error: unknown) => {
         if (error instanceof HttpErrorResponse && error.status === 404) {

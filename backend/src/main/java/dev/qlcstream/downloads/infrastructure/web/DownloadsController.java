@@ -65,6 +65,16 @@ public class DownloadsController {
         return new SubmittedResponse(submitted.id(), submitted.status());
     }
 
+    @PostMapping("/series")
+    @ResponseStatus(HttpStatus.CREATED)
+    SubmittedResponse submitSeries(@Valid @RequestBody CreateSeriesDownloadRequest request) {
+        var submitted = submissions.submitSeries(new DownloadSubmissionService.SeriesDownloadRequest(request.seriesTmdbId(), request.seriesTitle(), request.posterPath(), request.seasonNumber(), request.episodeNumber(), request.releaseTitle(), request.acquisitionRef(), request.indexerName(), request.resolutionHeight(), request.sourceType(), request.dynamicRange()));
+        return new SubmittedResponse(submitted.id(), submitted.status());
+    }
+
+    record CreateSeriesDownloadRequest(@Positive long seriesTmdbId, @NotBlank String seriesTitle, String posterPath, @Positive Integer seasonNumber, @Positive Integer episodeNumber, @NotBlank String releaseTitle, @NotBlank String acquisitionRef, String indexerName, @Positive Integer resolutionHeight, String sourceType, String dynamicRange) {
+    }
+
     record CreateDownloadRequest(@Positive long movieTmdbId, @NotBlank String releaseTitle, @NotBlank String acquisitionRef,
             String indexerName, @Positive Integer resolutionHeight, String sourceType, String dynamicRange) {
     }
@@ -72,11 +82,11 @@ public class DownloadsController {
     record SubmittedResponse(UUID id, String status) {
     }
 
-    record DownloadResponse(UUID id, long movieTmdbId, String movieTitle, String posterPath, String releaseTitle,
+    record DownloadResponse(UUID id, long movieTmdbId, String movieTitle, String posterPath, String mediaType, String releaseTitle,
             Integer resolutionHeight, String sourceType, String dynamicRange, String status, double progress,
             Long totalBytes, long downloadedBytes, long downloadSpeedBps, Long etaSeconds, Instant createdAt) {
         static DownloadResponse from(DownloadSummary download) {
-            return new DownloadResponse(download.id(), download.movieTmdbId(), download.movieTitle(), download.posterPath(),
+            return new DownloadResponse(download.id(), download.movieTmdbId(), download.movieTitle(), download.posterPath(), download.mediaType(),
                     download.releaseTitle(), download.resolutionHeight(), download.sourceType(), download.dynamicRange(),
                     download.status().name(), download.progress(), download.totalBytes(), download.downloadedBytes(),
                     download.downloadSpeedBps(), download.etaSeconds(), download.createdAt());

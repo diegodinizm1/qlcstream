@@ -39,6 +39,18 @@ public class DownloadSubmissionService {
         return new SubmittedDownload(id, "QUEUED");
     }
 
+    @Transactional
+    public SubmittedDownload submitSeries(SeriesDownloadRequest request) {
+        var id = UUID.randomUUID();
+        var relativeDirectory = storageSettings.downloadDirectory() + "/" + id;
+        qbittorrent.add(request.acquisitionRef(), "/downloads/" + relativeDirectory);
+        downloads.save(DownloadRow.queuedSeries(request.seriesTmdbId(), request.seriesTitle(), request.posterPath(), request.seasonNumber(), request.episodeNumber(), id, request.releaseTitle(), request.acquisitionRef(), request.indexerName(), request.resolutionHeight(), request.sourceType(), request.dynamicRange(), relativeDirectory));
+        return new SubmittedDownload(id, "QUEUED");
+    }
+
+    public record SeriesDownloadRequest(long seriesTmdbId, String seriesTitle, String posterPath, Integer seasonNumber, Integer episodeNumber, String releaseTitle, String acquisitionRef, String indexerName, Integer resolutionHeight, String sourceType, String dynamicRange) {
+    }
+
     public record DownloadRequest(long movieTmdbId, String releaseTitle, String acquisitionRef, String indexerName,
             Integer resolutionHeight, String sourceType, String dynamicRange) {
     }

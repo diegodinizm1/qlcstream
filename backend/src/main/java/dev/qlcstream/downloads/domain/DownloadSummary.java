@@ -8,6 +8,7 @@ public record DownloadSummary(
         long movieTmdbId,
         String movieTitle,
         String posterPath,
+        String mediaType,
         String releaseTitle,
         Integer resolutionHeight,
         String sourceType,

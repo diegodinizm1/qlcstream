@@ -44,7 +44,12 @@ public class QbittorrentDownloadSynchronizer {
                 changed |= download.synchronize(torrent.hash(), torrent.state(), torrent.progress(), torrent.size(), torrent.downloaded(),
                         torrent.downloadSpeedBps(), torrent.eta(), status);
                 if (status.equals("SEEDING") || status.equals("COMPLETED")) {
-                    library.registerCompletedDownload(download.movieId(), download.id(), download.relativeDirectory());
+                    if (download.movieId() != null) {
+                        library.registerCompletedDownload(download.movieId(), download.id(), download.relativeDirectory());
+                    } else if (download.seriesTmdbId() != null) {
+                        library.registerCompletedSeries(download.seriesTmdbId(), download.seriesTitle(), download.seriesPosterPath(),
+                                download.seasonNumber(), download.episodeNumber(), download.id(), download.relativeDirectory());
+                    }
                     if (!library.hasPresentVideo(download.id())) {
                         qbittorrent.remove(torrent.hash());
                         download.markRemoved();

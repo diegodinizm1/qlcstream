@@ -22,6 +22,10 @@ nav:not(.mobile-nav) a.active::after { content: ''; position: absolute; right: 0
 .autocomplete-list span { min-width: 0; display: grid; gap: 3px; }
 .autocomplete-list strong { overflow: hidden; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
 .autocomplete-list small { color: var(--muted); font: 10px var(--mono); }
+.autocomplete-group { margin: 0; padding: 9px 12px 5px; color: var(--quiet); font: 9px var(--mono); letter-spacing: .11em; text-transform: uppercase; }
+.autocomplete-group + button { border-top: 0; }
+.autocomplete-list .person-suggestion img, .autocomplete-list .person-suggestion > i { width: 34px; height: 34px; border-radius: 50%; }
+.autocomplete-feedback { display: flex; align-items: center; gap: 8px; margin: 0; padding: 15px 12px; color: var(--muted); font-size: 12px; }.autocomplete-feedback i { color: var(--accent); }
 .topbar-actions { display: flex; gap: 2px; }
 .settings-link, .theme-toggle { width: 34px; height: 34px; display: grid; place-items: center; border: 0; border-radius: var(--radius-sm); color: var(--muted); background: transparent; font-size: 18px; text-decoration: none; }
 .settings-link:hover, .settings-link.active, .theme-toggle:hover { color: var(--text); background: var(--surface); }

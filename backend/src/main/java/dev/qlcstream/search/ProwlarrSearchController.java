@@ -38,6 +38,16 @@ public class ProwlarrSearchController {
                 .map(ReleaseResponse::from).toList();
     }
 
+    @GetMapping("/series-releases")
+    List<ReleaseResponse> seriesReleases(@RequestParam @NotBlank String query) {
+        if (!properties.configured()) throw new IllegalStateException("Prowlarr não está configurado.");
+        var response = client.get().uri(uri -> uri.path("/api/v1/search").queryParam("query", query).build())
+                .header("X-Api-Key", properties.apiKey()).retrieve().body(ProwlarrRelease[].class);
+        if (response == null) return List.of();
+        return java.util.Arrays.stream(response).filter(release -> EPISODE.matcher(release.title() == null ? "" : release.title()).find())
+                .sorted(Comparator.comparingInt((ProwlarrRelease release) -> score(release, null)).reversed()).map(ReleaseResponse::from).toList();
+    }
+
     private static final Pattern EPISODE = Pattern.compile("(?i)\\b(s\\d{1,2}(e\\d{1,2})?|season\\s*\\d+)\\b");
     private static boolean isMovieRelease(ProwlarrRelease release, Integer year) {
         var title = release.title() == null ? "" : release.title();

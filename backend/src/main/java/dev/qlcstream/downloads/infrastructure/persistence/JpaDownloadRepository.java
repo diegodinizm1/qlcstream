@@ -20,7 +20,7 @@ public class JpaDownloadRepository implements DownloadRepository {
     @Override
     public List<DownloadSummary> findActive() {
         return repository.findActive().stream().map(row -> new DownloadSummary(
-                row.getId(), row.getMovieTmdbId(), row.getMovieTitle(), row.getPosterPath(), row.getReleaseTitle(),
+                row.getId(), row.getMovieTmdbId(), row.getMovieTitle(), row.getPosterPath(), row.getMediaType(), row.getReleaseTitle(),
                 row.getResolutionHeight(), row.getSourceType(), row.getDynamicRange(), DownloadStatus.valueOf(row.getStatus()),
                 row.getProgress(), row.getTotalBytes(), row.getDownloadedBytes(), row.getDownloadSpeedBps(),
                 row.getEtaSeconds(), row.getCreatedAt())).toList();

@@ -22,10 +22,10 @@ import { apiUrl } from '../core/api-url';
         <section class="download-list" aria-label="Downloads ativos">
           @for (download of downloads(); track download.id) {
             <article class="download-row">
-              <a [routerLink]="['/catalog', download.movieTmdbId]" class="download-poster" [attr.aria-label]="'Abrir ' + download.movieTitle">
-                @if (download.posterPath) { <img [src]="posterUrl(download)" [alt]="'Pôster de ' + download.movieTitle" /> } @else { <i class="ph ph-film-strip"></i> }
+              <a [routerLink]="[download.mediaType === 'SERIES' ? '/series' : '/catalog', download.movieTmdbId]" class="download-poster" [attr.aria-label]="'Abrir ' + download.movieTitle">
+                @if (download.posterPath) { <img [src]="posterUrl(download)" [alt]="'Pôster de ' + download.movieTitle" /> } @else { <i class="ph" [class.ph-television]="download.mediaType === 'SERIES'" [class.ph-film-strip]="download.mediaType !== 'SERIES'"></i> }
               </a>
-              <div class="download-info"><a [routerLink]="['/catalog', download.movieTmdbId]">{{ download.movieTitle }}</a><p>{{ download.releaseTitle }}</p><div class="download-tags"><span>{{ quality(download) }}</span><span>{{ status(download.status) }}</span></div></div>
+              <div class="download-info"><a [routerLink]="[download.mediaType === 'SERIES' ? '/series' : '/catalog', download.movieTmdbId]">{{ download.movieTitle }}</a><p>{{ download.releaseTitle }}</p><div class="download-tags"><span>{{ quality(download) }}</span><span>{{ status(download.status) }}</span></div></div>
               <div class="download-progress"><div><strong>{{ percent(download.progress) }}</strong><span>{{ transferMeta(download) }}</span></div><div class="progress-track"><span [style.width.%]="download.progress * 100"></span></div><div class="download-actions">@if (download.status === 'PAUSED') { <button class="text-action" type="button" (click)="control(download, 'resume')">Retomar</button> } @else if (canPause(download.status)) { <button class="text-action" type="button" (click)="control(download, 'pause')">Pausar</button> } <button class="text-action danger-action" type="button" (click)="control(download, 'cancel')">Cancelar</button></div></div>
             </article>
           }
@@ -59,8 +59,8 @@ export class DownloadsPage {
   }
   canPause(status: string): boolean { return ['METADATA', 'QUEUED', 'DOWNLOADING', 'STALLED', 'CHECKING'].includes(status); }
   control(download: DownloadSummary, action: 'pause' | 'resume' | 'cancel'): void {
-    if (action === 'cancel' && !confirm(`Cancelar “${download.movieTitle}” no qBittorrent? O arquivo já salvo será mantido.`)) return;
-    this.downloadsApi.control(download.id, action).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({ next: () => this.load(false), error: () => this.errorMessage.set('Não foi possível executar esta ação no qBittorrent.') });
+    if (action === 'cancel' && !confirm(`Cancelar “${download.movieTitle}”? O arquivo já salvo será mantido.`)) return;
+    this.downloadsApi.control(download.id, action).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({ next: () => this.load(false), error: () => this.errorMessage.set('Não foi possível concluir esta ação.') });
   }
   private subscribeToUpdates(): void {
     const source = new EventSource(apiUrl('/api/downloads/events'));

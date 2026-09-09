@@ -7,6 +7,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -58,10 +59,179 @@ public class LibraryController {
         return new StorageResponse(storageSettings.updateDownloadDirectory(request.downloadDirectory()));
     }
 
+    @GetMapping("/favorites")
+    List<FavoriteResponse> favorites() {
+        return jdbc.query("SELECT media_type, tmdb_id, title, poster_path, subtitle, added_at FROM library_favorite ORDER BY added_at DESC",
+                (result, row) -> new FavoriteResponse(result.getString("media_type"), result.getLong("tmdb_id"),
+                        result.getString("title"), result.getString("poster_path"), result.getString("subtitle"),
+                        result.getTimestamp("added_at").toInstant()));
+    }
+
+    @PostMapping("/favorites/{mediaType}/{tmdbId}")
+    void addFavorite(@PathVariable String mediaType, @PathVariable long tmdbId,
+            @Valid @RequestBody FavoriteRequest request) {
+        jdbc.update("""
+                INSERT INTO library_favorite (media_type, tmdb_id, title, poster_path, subtitle)
+                VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT (media_type, tmdb_id) DO UPDATE
+                SET title = EXCLUDED.title, poster_path = EXCLUDED.poster_path, subtitle = EXCLUDED.subtitle
+                """, favoriteType(mediaType), tmdbId, request.title(), request.posterPath(), request.subtitle());
+    }
+
+    @DeleteMapping("/favorites/{mediaType}/{tmdbId}")
+    void removeFavorite(@PathVariable String mediaType, @PathVariable long tmdbId) {
+        jdbc.update("DELETE FROM library_favorite WHERE media_type = ? AND tmdb_id = ?", favoriteType(mediaType), tmdbId);
+    }
+
+    private String favoriteType(String value) {
+        var type = value.toUpperCase(java.util.Locale.ROOT);
+        if (!type.equals("MOVIE") && !type.equals("SERIES")) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Tipo de mídia inválido.");
+        }
+        return type;
+    }
+
+    @GetMapping("/planned")
+    List<PlannedMovieResponse> planned() {
+        return jdbc.query("""
+                SELECT m.tmdb_id, m.title, m.original_title, m.poster_path, m.release_date, m.vote_average, p.added_at
+                FROM planned_library_movie p
+                JOIN movie m ON m.id = p.movie_id
+                WHERE NOT EXISTS (
+                    SELECT 1 FROM local_file lf
+                    WHERE lf.movie_id = m.id AND lf.file_kind = 'VIDEO' AND lf.availability = 'PRESENT'
+                )
+                ORDER BY p.added_at DESC
+                """, (result, row) -> new PlannedMovieResponse(result.getLong("tmdb_id"), result.getString("title"),
+                result.getString("original_title"), result.getString("poster_path"), result.getObject("release_date", java.time.LocalDate.class),
+                result.getBigDecimal("vote_average"), result.getTimestamp("added_at").toInstant()));
+    }
+
+    @GetMapping("/movie-ids")
+    List<Long> libraryMovieIds() {
+        return jdbc.queryForList("""
+                SELECT m.tmdb_id
+                FROM movie m
+                WHERE EXISTS (SELECT 1 FROM planned_library_movie p WHERE p.movie_id = m.id)
+                   OR EXISTS (
+                       SELECT 1 FROM local_file lf
+                       WHERE lf.movie_id = m.id AND lf.file_kind = 'VIDEO' AND lf.availability = 'PRESENT'
+                   )
+                """, Long.class);
+    }
+
+    @GetMapping("/planned/{tmdbId}")
+    PlannedStatusResponse plannedStatus(@PathVariable long tmdbId) {
+        var planned = Boolean.TRUE.equals(jdbc.queryForObject("""
+                SELECT EXISTS (
+                    SELECT 1 FROM planned_library_movie p
+                    JOIN movie m ON m.id = p.movie_id
+                    WHERE m.tmdb_id = ?
+                )
+                """, Boolean.class, tmdbId));
+        return new PlannedStatusResponse(planned);
+    }
+
+    @PostMapping("/planned/{tmdbId}")
+    PlannedStatusResponse addPlanned(@PathVariable long tmdbId) {
+        var updated = jdbc.update("""
+                INSERT INTO planned_library_movie (movie_id)
+                SELECT id FROM movie WHERE tmdb_id = ?
+                ON CONFLICT (movie_id) DO NOTHING
+                """, tmdbId);
+        if (updated == 0) {
+            var movieExists = Boolean.TRUE.equals(jdbc.queryForObject("SELECT EXISTS (SELECT 1 FROM movie WHERE tmdb_id = ?)", Boolean.class, tmdbId));
+            if (!movieExists) throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Filme não encontrado.");
+        }
+        return new PlannedStatusResponse(true);
+    }
+
+    @DeleteMapping("/planned/{tmdbId}")
+    void removePlanned(@PathVariable long tmdbId) {
+        jdbc.update("""
+                DELETE FROM planned_library_movie
+                WHERE movie_id = (SELECT id FROM movie WHERE tmdb_id = ?)
+                """, tmdbId);
+    }
+
+    @GetMapping("/planned-series")
+    List<PlannedSeriesResponse> plannedSeries() {
+        return jdbc.query("""
+                SELECT p.tmdb_id, p.name, p.original_name, p.poster_path, p.first_air_date, p.vote_average, p.added_at
+                FROM planned_library_series p
+                WHERE NOT EXISTS (
+                    SELECT 1 FROM local_file lf
+                    WHERE lf.series_tmdb_id = p.tmdb_id AND lf.file_kind = 'VIDEO' AND lf.availability = 'PRESENT'
+                )
+                ORDER BY p.added_at DESC
+                """, (result, row) -> new PlannedSeriesResponse(result.getLong("tmdb_id"), result.getString("name"),
+                result.getString("original_name"), result.getString("poster_path"), result.getObject("first_air_date", java.time.LocalDate.class),
+                result.getBigDecimal("vote_average"), result.getTimestamp("added_at").toInstant()));
+    }
+
+    @GetMapping("/planned-series/{tmdbId}")
+    PlannedStatusResponse plannedSeriesStatus(@PathVariable long tmdbId) {
+        return new PlannedStatusResponse(Boolean.TRUE.equals(jdbc.queryForObject(
+                "SELECT EXISTS (SELECT 1 FROM planned_library_series WHERE tmdb_id = ?)", Boolean.class, tmdbId)));
+    }
+
+    @PostMapping("/planned-series/{tmdbId}")
+    PlannedStatusResponse addPlannedSeries(@PathVariable long tmdbId, @Valid @RequestBody PlannedSeriesRequest request) {
+        jdbc.update("""
+                INSERT INTO planned_library_series (tmdb_id, name, original_name, poster_path, first_air_date, vote_average)
+                VALUES (?, ?, ?, ?, ?, ?)
+                ON CONFLICT (tmdb_id) DO NOTHING
+                """, tmdbId, request.name(), request.originalName(), request.posterPath(), request.firstAirDate(), request.voteAverage());
+        return new PlannedStatusResponse(true);
+    }
+
+    @DeleteMapping("/planned-series/{tmdbId}")
+    void removePlannedSeries(@PathVariable long tmdbId) {
+        jdbc.update("DELETE FROM planned_library_series WHERE tmdb_id = ?", tmdbId);
+    }
+
+    record FavoriteRequest(@NotBlank String title, String posterPath, String subtitle) {
+    }
+
+    record FavoriteResponse(String mediaType, long tmdbId, String title, String posterPath, String subtitle,
+            java.time.Instant addedAt) {
+    }
+
     record StorageRequest(@NotBlank String downloadDirectory) {
     }
 
     record StorageResponse(String downloadDirectory) {
+    }
+
+    record PlannedStatusResponse(boolean planned) {
+    }
+
+    record PlannedMovieResponse(long tmdbId, String title, String originalTitle, String posterPath,
+            java.time.LocalDate releaseDate, java.math.BigDecimal voteAverage, java.time.Instant addedAt) {
+    }
+
+    record PlannedSeriesRequest(@NotBlank String name, String originalName, String posterPath,
+            java.time.LocalDate firstAirDate, java.math.BigDecimal voteAverage) {
+    }
+
+    record PlannedSeriesResponse(long tmdbId, String name, String originalName, String posterPath,
+            java.time.LocalDate firstAirDate, java.math.BigDecimal voteAverage, java.time.Instant addedAt) {
+    }
+
+    @GetMapping("/series")
+    List<SeriesLibraryItemResponse> browseSeries() {
+        return jdbc.query("""
+                SELECT lf.id, lf.series_tmdb_id, lf.series_title, lf.series_poster_path, lf.season_number, lf.episode_number,
+                       lf.relative_path, lf.size_bytes, d.resolution_height, d.source_type, d.dynamic_range, lf.discovered_at
+                FROM local_file lf
+                LEFT JOIN download d ON d.id = lf.download_id
+                WHERE lf.file_kind = 'VIDEO' AND lf.availability = 'PRESENT' AND lf.series_tmdb_id IS NOT NULL
+                ORDER BY lf.discovered_at DESC
+                """, (result, row) -> new SeriesLibraryItemResponse(result.getLong("id"), result.getLong("series_tmdb_id"),
+                result.getString("series_title"), result.getString("series_poster_path"), result.getObject("season_number", Integer.class),
+                result.getObject("episode_number", Integer.class), result.getString("relative_path"), result.getLong("size_bytes"),
+                result.getObject("resolution_height", Integer.class), result.getString("source_type"), result.getString("dynamic_range"),
+                result.getTimestamp("discovered_at").toInstant()));
     }
 
     @GetMapping
@@ -82,5 +252,10 @@ public class LibraryController {
 
     record LibraryItemResponse(long id, long movieTmdbId, String movieTitle, String posterPath, String relativePath,
             long sizeBytes, Integer resolutionHeight, String sourceType, String dynamicRange, java.time.Instant discoveredAt) {
+    }
+
+    record SeriesLibraryItemResponse(long id, long seriesTmdbId, String seriesTitle, String posterPath, Integer seasonNumber,
+            Integer episodeNumber, String relativePath, long sizeBytes, Integer resolutionHeight, String sourceType,
+            String dynamicRange, java.time.Instant discoveredAt) {
     }
 }

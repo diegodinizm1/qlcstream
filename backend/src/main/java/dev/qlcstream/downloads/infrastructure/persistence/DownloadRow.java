@@ -15,8 +15,26 @@ public class DownloadRow {
     @Id
     private UUID id;
 
-    @Column(name = "movie_id", nullable = false)
-    private long movieId;
+    @Column(name = "movie_id")
+    private Long movieId;
+
+    @Column(name = "media_type", nullable = false)
+    private String mediaType;
+
+    @Column(name = "series_tmdb_id")
+    private Long seriesTmdbId;
+
+    @Column(name = "series_title")
+    private String seriesTitle;
+
+    @Column(name = "series_poster_path")
+    private String seriesPosterPath;
+
+    @Column(name = "season_number")
+    private Integer seasonNumber;
+
+    @Column(name = "episode_number")
+    private Integer episodeNumber;
 
     @Column(name = "storage_root_id", nullable = false)
     private long storageRootId;
@@ -90,12 +108,13 @@ public class DownloadRow {
     protected DownloadRow() {
     }
 
-    public static DownloadRow queued(long movieId, UUID id, String releaseTitle, String acquisitionRef, String indexerName,
+    public static DownloadRow queued(Long movieId, UUID id, String releaseTitle, String acquisitionRef, String indexerName,
             Integer resolutionHeight, String sourceType, String dynamicRange, String relativeDirectory) {
         var now = Instant.now();
         var row = new DownloadRow();
         row.id = id;
         row.movieId = movieId;
+        row.mediaType = "MOVIE";
         row.storageRootId = 1;
         row.idempotencyKey = UUID.randomUUID();
         row.engine = "QBITTORRENT";
@@ -116,13 +135,22 @@ public class DownloadRow {
         return row;
     }
 
+    public static DownloadRow queuedSeries(long seriesTmdbId, String seriesTitle, String posterPath, Integer seasonNumber, Integer episodeNumber, UUID id, String releaseTitle, String acquisitionRef, String indexerName, Integer resolutionHeight, String sourceType, String dynamicRange, String relativeDirectory) {
+        var row = queued(null, id, releaseTitle, acquisitionRef, indexerName, resolutionHeight, sourceType, dynamicRange, relativeDirectory);
+        row.mediaType = "SERIES"; row.seriesTmdbId = seriesTmdbId; row.seriesTitle = seriesTitle; row.seriesPosterPath = posterPath; row.seasonNumber = seasonNumber; row.episodeNumber = episodeNumber;
+        return row;
+    }
+
     public String relativeDirectory() {
         return relativeDirectory;
     }
 
-    public long movieId() {
-        return movieId;
-    }
+    public Long movieId() { return movieId; }
+    public Long seriesTmdbId() { return seriesTmdbId; }
+    public String seriesTitle() { return seriesTitle; }
+    public String seriesPosterPath() { return seriesPosterPath; }
+    public Integer seasonNumber() { return seasonNumber; }
+    public Integer episodeNumber() { return episodeNumber; }
 
     public UUID id() {
         return id;

@@ -10,9 +10,16 @@ public class DesktopCorsConfiguration implements WebMvcConfigurer {
     @Override
     public void addCorsMappings(CorsRegistry registry) {
         registry.addMapping("/api/**")
-                .allowedOrigins("http://localhost:4200", "tauri://localhost", "https://tauri.localhost")
+                .allowedOrigins(
+                        "http://localhost:4200",
+                        "http://127.0.0.1:4200",
+                        "http://localhost:4201",
+                        "http://127.0.0.1:4201",
+                        "tauri://localhost",
+                        "http://tauri.localhost",
+                        "https://tauri.localhost")
                 .allowedMethods("GET", "POST", "PUT", "DELETE", "OPTIONS")
-                .allowedHeaders("Content-Type")
+                .allowedHeaders("Content-Type", "Accept", "Last-Event-ID")
                 .maxAge(3600);
     }
 }

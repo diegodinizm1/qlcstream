@@ -1,9 +1,9 @@
 import { ChangeDetectionStrategy, Component, DestroyRef, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
-import { Subject, catchError, debounceTime, distinctUntilChanged, of, switchMap } from 'rxjs';
+import { Subject, catchError, debounceTime, distinctUntilChanged, forkJoin, of, switchMap } from 'rxjs';
 
-import { CatalogApiService, CatalogMovie } from './core/catalog-api.service';
+import { CatalogApiService, CatalogMovie, CatalogPerson, CatalogSeries } from './core/catalog-api.service';
 
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -21,7 +21,10 @@ export class App {
 
   readonly globalQuery = signal('');
   readonly suggestions = signal<CatalogMovie[]>([]);
+  readonly peopleSuggestions = signal<CatalogPerson[]>([]);
+  readonly seriesSuggestions = signal<CatalogSeries[]>([]);
   readonly autocompleteOpen = signal(false);
+  readonly autocompleteState = signal<'idle' | 'loading' | 'ready' | 'error'>('idle');
   readonly theme = signal<'dark' | 'light'>(
     typeof window.matchMedia === 'function' && window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark',
   );
@@ -33,11 +36,25 @@ export class App {
     this.queryChanges.pipe(
       debounceTime(220),
       distinctUntilChanged(),
-      switchMap((query) => query.length < 2
-        ? of([])
-        : this.catalogApi.search(query).pipe(catchError(() => of([])))),
+      switchMap((query) => {
+        if (query.length < 2) {
+          this.autocompleteState.set('idle');
+          return of({ movies: [], people: [], series: [] });
+        }
+        this.autocompleteState.set('loading');
+        return forkJoin({
+          movies: this.catalogApi.search(query).pipe(catchError(() => of([]))),
+          people: this.catalogApi.searchPeople(query).pipe(catchError(() => of([]))),
+          series: this.catalogApi.searchSeries(query).pipe(catchError(() => of([]))),
+        });
+      }),
       takeUntilDestroyed(this.destroyRef),
-    ).subscribe((movies) => this.suggestions.set(movies.slice(0, 6)));
+    ).subscribe(({ movies, people, series }) => {
+      this.suggestions.set(movies.slice(0, 6));
+      this.peopleSuggestions.set(people.slice(0, 3));
+      this.seriesSuggestions.set(series.slice(0, 3));
+      if (this.autocompleteState() !== 'error') this.autocompleteState.set('ready');
+    });
   }
 
   toggleTheme(): void {
@@ -48,6 +65,7 @@ export class App {
     const query = (event.target as HTMLInputElement).value;
     this.globalQuery.set(query);
     this.autocompleteOpen.set(true);
+    if (query.trim().length < 2) this.autocompleteState.set('idle');
     this.queryChanges.next(query.trim());
   }
 
@@ -62,8 +80,31 @@ export class App {
   selectSuggestion(movie: CatalogMovie): void {
     this.globalQuery.set(movie.title);
     this.suggestions.set([]);
+    this.peopleSuggestions.set([]);
+    this.seriesSuggestions.set([]);
+    this.autocompleteState.set('idle');
     this.autocompleteOpen.set(false);
     void this.router.navigate(['/catalog', movie.tmdbId]);
+  }
+
+  selectPerson(person: CatalogPerson): void {
+    this.globalQuery.set(person.name);
+    this.suggestions.set([]);
+    this.peopleSuggestions.set([]);
+    this.seriesSuggestions.set([]);
+    this.autocompleteState.set('idle');
+    this.autocompleteOpen.set(false);
+    void this.router.navigate(['/people', person.tmdbId]);
+  }
+
+  selectSeries(series: CatalogSeries): void {
+    this.globalQuery.set(series.name);
+    this.suggestions.set([]);
+    this.peopleSuggestions.set([]);
+    this.seriesSuggestions.set([]);
+    this.autocompleteState.set('idle');
+    this.autocompleteOpen.set(false);
+    void this.router.navigate(['/series', series.tmdbId]);
   }
 
   searchCatalog(event: Event): void {

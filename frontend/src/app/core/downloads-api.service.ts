@@ -9,6 +9,7 @@ export interface DownloadSummary {
   movieTmdbId: number;
   movieTitle: string;
   posterPath: string | null;
+  mediaType: 'MOVIE' | 'SERIES';
   releaseTitle: string;
   resolutionHeight: number | null;
   sourceType: string | null;
@@ -32,6 +33,8 @@ export interface CreateDownloadRequest {
   dynamicRange: string | null;
 }
 
+export interface CreateSeriesDownloadRequest { seriesTmdbId: number; seriesTitle: string; posterPath: string | null; seasonNumber: number; episodeNumber: number | null; releaseTitle: string; acquisitionRef: string; indexerName: string | null; resolutionHeight: number | null; sourceType: string | null; dynamicRange: string | null; }
+
 export interface SubmittedDownload {
   id: string;
   status: string;
@@ -48,6 +51,8 @@ export class DownloadsApiService {
   enqueue(request: CreateDownloadRequest): Observable<SubmittedDownload> {
     return this.http.post<SubmittedDownload>(apiUrl('/api/downloads'), request);
   }
+
+  enqueueSeries(request: CreateSeriesDownloadRequest): Observable<SubmittedDownload> { return this.http.post<SubmittedDownload>(apiUrl('/api/downloads/series'), request); }
 
   control(id: string, action: 'pause' | 'resume' | 'cancel'): Observable<void> {
     return this.http.post<void>(apiUrl(`/api/downloads/${id}/${action.toUpperCase()}`), {});

@@ -5,8 +5,8 @@
   "identifier": "dev.qlcstream.desktop",
   "build": {
     "frontendDist": "../dist/frontend/browser",
-    "devUrl": "http://localhost:4200",
-    "beforeDevCommand": "npm run start",
+    "devUrl": "http://localhost:4201",
+    "beforeDevCommand": "npm run start -- --port 4201",
     "beforeBuildCommand": "npm run build"
   },
   "app": {

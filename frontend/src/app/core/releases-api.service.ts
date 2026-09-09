@@ -10,4 +10,5 @@ export interface ReleaseOption { title: string; protocol: string | null; indexer
 export class ReleasesApiService {
   private readonly http = inject(HttpClient);
   search(query: string, year: string): Observable<ReleaseOption[]> { return this.http.get<ReleaseOption[]>(apiUrl('/api/search/releases'), { params: { query, year } }); }
+  searchSeries(query: string): Observable<ReleaseOption[]> { return this.http.get<ReleaseOption[]>(apiUrl('/api/search/series-releases'), { params: { query } }); }
 }
