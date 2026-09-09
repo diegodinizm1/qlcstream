@@ -19,14 +19,14 @@ import { isDesktopApp } from '../core/api-url';
   template: `
     @if (details(); as data) {
       <section class="details-hero" aria-labelledby="series-title">
-        @if (data.series.backdropPath) { <img [src]="backdropUrl(data.series.backdropPath)" [alt]="'Cena de ' + data.series.name" /> }
+        @if (data.series.backdropPath) { <img [src]="backdropUrl(data.series.backdropPath)" [alt]="'Cena de ' + data.series.name" fetchpriority="high" decoding="async" /> }
         <div class="details-shade"></div>
         <div class="page details-hero-content"><a class="back-link" routerLink="/series"><i class="ph ph-arrow-left"></i>Séries</a></div>
       </section>
       <main class="page details-content">
         <div class="details-layout">
           <aside class="detail-poster">
-            @if (data.series.posterPath) { <img [src]="posterUrl(data.series.posterPath)" [alt]="'Pôster de ' + data.series.name" /> }
+            @if (data.series.posterPath) { <img [src]="posterUrl(data.series.posterPath)" [alt]="'Pôster de ' + data.series.name" loading="lazy" decoding="async" /> }
             @else { <span><i class="ph ph-television"></i></span> }
           </aside>
           <article class="details-copy">
@@ -50,13 +50,13 @@ import { isDesktopApp } from '../core/api-url';
             }
             @if (seasonDetails(); as current) {
               <div class="episode-list">@for (episode of current.episodes; track episode.tmdbId) {
-                <article>@if (episode.stillPath) { <img [src]="stillUrl(episode)" [alt]="episode.name" /> } @else { <span><i class="ph ph-play-circle"></i></span> }
+                <article>@if (episode.stillPath) { <img [src]="stillUrl(episode)" [alt]="episode.name" loading="lazy" decoding="async" /> } @else { <span><i class="ph ph-play-circle"></i></span> }
                   <div><p>E{{ padded(episode.episodeNumber) }} · {{ year(episode.airDate) }}</p><h3>{{ episode.name }}</h3>@if (episode.overview) { <small>{{ episode.overview }}</small> }<button class="episode-download" type="button" (click)="openEpisodeReleases(data, selectedSeason()!, episode)"><i class="ph ph-download-simple"></i>Opções de download</button></div>
                 </article>
               }</div>
             }
           </section>
-          @if (data.cast.length) { <section class="cast-section"><h2>Elenco principal</h2><div class="cast-list">@for (member of data.cast; track member.tmdbId) { <a class="cast-member" [routerLink]="['/people', member.tmdbId]">@if (member.profilePath) { <img [src]="profileUrl(member.profilePath)" [alt]="member.name" /> } @else { <span><i class="ph ph-user"></i></span> }<div><strong>{{ member.name }}</strong>@if (member.character) { <small>{{ member.character }}</small> }</div></a> }</div></section> }
+          @if (data.cast.length) { <section class="cast-section"><h2>Elenco principal</h2><div class="cast-list">@for (member of data.cast; track member.tmdbId) { <a class="cast-member" [routerLink]="['/people', member.tmdbId]">@if (member.profilePath) { <img [src]="profileUrl(member.profilePath)" [alt]="member.name" loading="lazy" decoding="async" /> } @else { <span><i class="ph ph-user"></i></span> }<div><strong>{{ member.name }}</strong>@if (member.character) { <small>{{ member.character }}</small> }</div></a> }</div></section> }
         </div>
       </main>
       @if (showReleases()) {
@@ -123,9 +123,9 @@ export class SeriesDetailsPage {
   releaseKey(release: ReleaseOption): string { return this.acquisitionRef(release) || release.infoUrl || release.title; }
   size(bytes: number | null): string { return bytes ? `${(bytes / 1_000_000_000).toFixed(1)} GB` : 'Tamanho não informado'; }
   backdropUrl(path: string): string { return `https://image.tmdb.org/t/p/w1280${path}`; }
-  posterUrl(path: string): string { return `https://image.tmdb.org/t/p/w500${path}`; }
+  posterUrl(path: string): string { return `https://image.tmdb.org/t/p/w342${path}`; }
   profileUrl(path: string): string { return `https://image.tmdb.org/t/p/w185${path}`; }
-  stillUrl(episode: SeriesEpisode): string { return `https://image.tmdb.org/t/p/w500${episode.stillPath}`; }
+  stillUrl(episode: SeriesEpisode): string { return `https://image.tmdb.org/t/p/w300${episode.stillPath}`; }
   year(value: string | null): string { return value?.slice(0, 4) ?? 'Sem data'; }
   rating(value: number | null): string { return value?.toFixed(1) ?? '—'; }
   padded(value: number): string { return value.toString().padStart(2, '0'); }

@@ -43,7 +43,7 @@ export class CollectionDetailsPage {
     });
   }
 
-  posterUrl(item: FavoriteItem): string { return `https://image.tmdb.org/t/p/w500${item.posterPath}`; }
+  posterUrl(item: FavoriteItem): string { return `https://image.tmdb.org/t/p/w342${item.posterPath}`; }
 
   removeItem(collection: LibraryCollection, item: FavoriteItem): void {
     this.libraryApi.removeFromCollection(collection.id, item.mediaType, item.tmdbId).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({

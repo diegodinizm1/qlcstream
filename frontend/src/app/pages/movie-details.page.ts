@@ -27,7 +27,7 @@ import { isDesktopApp } from '../core/api-url';
       @default {
         @if (movie(); as details) {
           <section class="details-hero" aria-labelledby="movie-title">
-            @if (details.backdropPath) { <img [src]="backdropUrl(details)" [alt]="'Cena de ' + details.title" /> }
+            @if (details.backdropPath) { <img [src]="backdropUrl(details)" [alt]="'Cena de ' + details.title" fetchpriority="high" decoding="async" /> }
             <div class="details-shade"></div>
             <div class="page details-hero-content"><a class="back-link" routerLink="/catalog"><i class="ph ph-arrow-left"></i>Catálogo</a></div>
           </section>
@@ -35,7 +35,7 @@ import { isDesktopApp } from '../core/api-url';
           <main class="page details-content">
             <div class="details-layout">
               <aside class="detail-poster">
-                @if (details.posterPath) { <img [src]="posterUrl(details)" [alt]="'Pôster de ' + details.title" /> }
+                @if (details.posterPath) { <img [src]="posterUrl(details)" [alt]="'Pôster de ' + details.title" loading="lazy" decoding="async" /> }
                 @else { <span><i class="ph ph-film-strip"></i></span> }
               </aside>
               <article class="details-copy">
@@ -51,8 +51,8 @@ import { isDesktopApp } from '../core/api-url';
             <div class="details-extra">
               @if (details.director || details.writers.length) { <section class="credits-section" aria-labelledby="credits-title"><h2 id="credits-title">Ficha técnica</h2><dl>@if (details.director) { <div><dt>Direção</dt><dd>{{ details.director }}</dd></div> } @if (details.writers.length) { <div><dt>Roteiro</dt><dd>{{ details.writers.join(', ') }}</dd></div> }</dl></section> }
               @if (details.trailerUrl; as trailerUrl) { <section class="trailer-section" aria-labelledby="trailer-title"><div class="trailer-heading"><h2 id="trailer-title">Trailer</h2><a [href]="trailerUrl" target="_blank" rel="noreferrer" (click)="openTrailer($event, trailerUrl)">Abrir no YouTube <i class="ph ph-arrow-up-right"></i></a></div><div class="trailer-player"><iframe [src]="trailerEmbedUrl(trailerUrl)" [title]="'Trailer de ' + details.title" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe></div></section> }
-              @if (details.cast.length) { <section class="cast-section" aria-labelledby="cast-title"><h2 id="cast-title">Elenco principal</h2><div class="cast-list">@for (member of details.cast; track member.tmdbId) { <a class="cast-member" [routerLink]="['/people', member.tmdbId]" [attr.aria-label]="'Ver detalhes de ' + member.name">@if (member.profilePath) { <img [src]="profileUrl(member.profilePath)" [alt]="member.name" /> } @else { <span><i class="ph ph-user"></i></span> }<div><strong>{{ member.name }}</strong>@if (member.character) { <small>{{ member.character }}</small> }</div></a> }</div></section> }
-              @if (details.recommendations.length) { <section class="recommendations-section" aria-labelledby="recommendations-title"><h2 id="recommendations-title">Você também pode gostar</h2><div class="recommendations-grid">@for (recommendation of details.recommendations; track recommendation.tmdbId) { <a [routerLink]="['/catalog', recommendation.tmdbId]">@if (recommendation.posterPath) { <img [src]="recommendationPosterUrl(recommendation)" [alt]="'Pôster de ' + recommendation.title" /> } @else { <span><i class="ph ph-film-strip"></i></span> }<strong>{{ recommendation.title }}</strong><small>{{ year(recommendation) }}</small></a> }</div></section> }
+              @if (details.cast.length) { <section class="cast-section" aria-labelledby="cast-title"><h2 id="cast-title">Elenco principal</h2><div class="cast-list">@for (member of details.cast; track member.tmdbId) { <a class="cast-member" [routerLink]="['/people', member.tmdbId]" [attr.aria-label]="'Ver detalhes de ' + member.name">@if (member.profilePath) { <img [src]="profileUrl(member.profilePath)" [alt]="member.name" loading="lazy" decoding="async" /> } @else { <span><i class="ph ph-user"></i></span> }<div><strong>{{ member.name }}</strong>@if (member.character) { <small>{{ member.character }}</small> }</div></a> }</div></section> }
+              @if (details.recommendations.length) { <section class="recommendations-section" aria-labelledby="recommendations-title"><h2 id="recommendations-title">Você também pode gostar</h2><div class="recommendations-grid">@for (recommendation of details.recommendations; track recommendation.tmdbId) { <a [routerLink]="['/catalog', recommendation.tmdbId]">@if (recommendation.posterPath) { <img [src]="recommendationPosterUrl(recommendation)" [alt]="'Pôster de ' + recommendation.title" loading="lazy" decoding="async" /> } @else { <span><i class="ph ph-film-strip"></i></span> }<strong>{{ recommendation.title }}</strong><small>{{ year(recommendation) }}</small></a> }</div></section> }
             </div>
           </main>
           @if (showReleases()) { <div class="release-overlay" role="presentation" (click)="closeReleases()"><section class="release-modal" role="dialog" aria-modal="true" aria-labelledby="release-title" (click)="$event.stopPropagation()"><header><div><p>OPÇÕES DISPONÍVEIS</p><h2 id="release-title">{{ details.title }}</h2></div><button class="icon-button" type="button" aria-label="Fechar" (click)="closeReleases()"><i class="ph ph-x"></i></button></header>@if (submissionMessage()) { <p class="submission-message">{{ submissionMessage() }}</p> } @if (releaseState() === 'loading') { <div class="release-state"><i class="ph ph-spinner-gap"></i>Procurando opções para download.</div> } @else if (releaseState() === 'error') { <div class="release-state error">Não foi possível encontrar opções agora. Tente novamente.</div> } @else if (!releases().length) { <div class="release-state">Nenhuma opção encontrada para este título.</div> } @else { <div class="release-list">@for (release of releases(); track releaseKey(release)) { <article><div><strong>{{ release.title }}</strong><p>{{ release.indexer || 'Fonte' }} · {{ release.seeders ?? 0 }} pessoas compartilhando · {{ size(release.size) }}</p></div><div class="release-actions"><button class="btn btn-primary" type="button" [disabled]="!acquisitionRef(release) || submittingRelease() === acquisitionRef(release)" (click)="enqueue(details, release)">@if (submittingRelease() === acquisitionRef(release)) { Preparando… } @else { Baixar }</button></div></article> }</div> }</section></div> }
@@ -99,7 +99,7 @@ export class MovieDetailsPage {
   }
 
   posterUrl(movie: MovieDetails): string {
-    return movie.posterPath ? `https://image.tmdb.org/t/p/w500${movie.posterPath}` : '';
+    return movie.posterPath ? `https://image.tmdb.org/t/p/w342${movie.posterPath}` : '';
   }
 
   profileUrl(path: string): string { return `https://image.tmdb.org/t/p/w185${path}`; }

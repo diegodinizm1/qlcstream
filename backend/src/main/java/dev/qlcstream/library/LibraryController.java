@@ -1,22 +1,21 @@
 package dev.qlcstream.library;
 
-import java.util.List;
-
-import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.DeleteMapping;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.PutMapping;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
-import org.springframework.http.HttpStatus;
-import org.springframework.web.server.ResponseStatusException;
-
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
+
+import org.springframework.http.HttpStatus;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.server.ResponseStatusException;
 
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
@@ -146,10 +145,6 @@ public class LibraryController {
                 SELECT m.tmdb_id, m.title, m.original_title, m.poster_path, m.release_date, m.vote_average, p.added_at
                 FROM planned_library_movie p
                 JOIN movie m ON m.id = p.movie_id
-                WHERE NOT EXISTS (
-                    SELECT 1 FROM local_file lf
-                    WHERE lf.movie_id = m.id AND lf.file_kind = 'VIDEO' AND lf.availability = 'PRESENT'
-                )
                 ORDER BY p.added_at DESC
                 """, (result, row) -> new PlannedMovieResponse(result.getLong("tmdb_id"), result.getString("title"),
                 result.getString("original_title"), result.getString("poster_path"), result.getObject("release_date", java.time.LocalDate.class),
@@ -208,10 +203,6 @@ public class LibraryController {
         return jdbc.query("""
                 SELECT p.tmdb_id, p.name, p.original_name, p.poster_path, p.first_air_date, p.vote_average, p.added_at
                 FROM planned_library_series p
-                WHERE NOT EXISTS (
-                    SELECT 1 FROM local_file lf
-                    WHERE lf.series_tmdb_id = p.tmdb_id AND lf.file_kind = 'VIDEO' AND lf.availability = 'PRESENT'
-                )
                 ORDER BY p.added_at DESC
                 """, (result, row) -> new PlannedSeriesResponse(result.getLong("tmdb_id"), result.getString("name"),
                 result.getString("original_name"), result.getString("poster_path"), result.getObject("first_air_date", java.time.LocalDate.class),

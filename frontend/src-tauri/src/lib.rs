@@ -43,10 +43,41 @@ fn library_root() -> Result<PathBuf, String> {
   Ok(root)
 }
 
+#[cfg(target_os = "windows")]
+fn windows_compatible_path(path: &Path) -> PathBuf {
+  let text = path.to_string_lossy();
+  if let Some(unc_path) = text.strip_prefix(r"\\?\UNC\") {
+    PathBuf::from(format!(r"\\{}", unc_path))
+  } else if let Some(dos_path) = text.strip_prefix(r"\\?\") {
+    PathBuf::from(dos_path)
+  } else {
+    path.to_path_buf()
+  }
+}
+
 #[tauri::command]
 fn open_library_file(relative_path: String) -> Result<(), String> {
   let file = library_file(&relative_path)?;
-  let status = Command::new("open").args(["-a", "VLC"]).arg(file).status()
+  #[cfg(target_os = "windows")]
+  let status = {
+    let file = windows_compatible_path(&file);
+    let mut vlc_candidates = Vec::new();
+    if let Ok(program_files) = std::env::var("ProgramFiles") {
+      vlc_candidates.push(PathBuf::from(program_files).join("VideoLAN/VLC/vlc.exe"));
+    }
+    if let Ok(program_files_x86) = std::env::var("ProgramFiles(x86)") {
+      vlc_candidates.push(PathBuf::from(program_files_x86).join("VideoLAN/VLC/vlc.exe"));
+    }
+    if let Ok(local_app_data) = std::env::var("LOCALAPPDATA") {
+      vlc_candidates.push(PathBuf::from(local_app_data).join("Programs/VLC/vlc.exe"));
+    }
+    let vlc = vlc_candidates.into_iter().find(|candidate| candidate.is_file())
+      .unwrap_or_else(|| PathBuf::from("vlc.exe"));
+    Command::new(vlc).arg(file).status()
+  };
+  #[cfg(not(target_os = "windows"))]
+  let status = Command::new("open").args(["-a", "VLC"]).arg(&file).status();
+  let status = status
     .map_err(|_| "O VLC não está instalado ou não pôde ser iniciado.".to_string())?;
   if status.success() { Ok(()) } else { Err("O VLC não pôde abrir o arquivo selecionado.".to_string()) }
 }
@@ -54,9 +85,13 @@ fn open_library_file(relative_path: String) -> Result<(), String> {
 #[tauri::command]
 fn reveal_library_file(relative_path: String) -> Result<(), String> {
   let file = library_file(&relative_path)?;
-  let status = Command::new("open").arg("-R").arg(file).status()
-    .map_err(|_| "O Finder não pôde ser iniciado.".to_string())?;
-  if status.success() { Ok(()) } else { Err("O Finder não pôde revelar o arquivo selecionado.".to_string()) }
+  #[cfg(target_os = "windows")]
+  let status = Command::new("explorer.exe").arg(format!("/select,{}", file.display())).status();
+  #[cfg(not(target_os = "windows"))]
+  let status = Command::new("open").arg("-R").arg(&file).status();
+  let status = status
+    .map_err(|_| "O gerenciador de arquivos não pôde ser iniciado.".to_string())?;
+  if status.success() { Ok(()) } else { Err("O gerenciador de arquivos não pôde revelar o arquivo selecionado.".to_string()) }
 }
 
 #[tauri::command]
@@ -83,7 +118,11 @@ fn open_external_url(url: String) -> Result<(), String> {
   if !valid {
     return Err("O link solicitado não é permitido.".to_string());
   }
-  let status = Command::new("open").arg(url).status()
+  #[cfg(target_os = "windows")]
+  let status = Command::new("cmd").args(["/C", "start", "", &url]).status();
+  #[cfg(not(target_os = "windows"))]
+  let status = Command::new("open").arg(url).status();
+  let status = status
     .map_err(|_| "Não foi possível abrir o navegador.".to_string())?;
   if status.success() { Ok(()) } else { Err("Não foi possível abrir o navegador.".to_string()) }
 }

@@ -15,7 +15,7 @@ import { LibraryApiService } from '../core/library-api.service';
   template: `
     @if (spotlightMovie(); as movie) {
       <section class="spotlight" aria-labelledby="spotlight-title">
-        @if (movie.backdropPath) { <img [src]="backdropUrl(movie)" [alt]="'Cena de ' + movie.title" /> }
+        @if (movie.backdropPath) { <img [src]="backdropUrl(movie)" [alt]="'Cena de ' + movie.title" fetchpriority="high" decoding="async" /> }
         <div class="spotlight-shade"></div>
         <div class="spotlight-content">
           <p class="spotlight-kicker">Em destaque</p>
@@ -30,7 +30,7 @@ import { LibraryApiService } from '../core/library-api.service';
             <div class="spotlight-carousel" aria-label="Outros filmes em destaque">
               <button type="button" class="spotlight-arrow" (click)="previousSpotlight()" aria-label="Filme anterior"><i class="ph ph-arrow-left"></i></button>
               <div class="spotlight-dots">
-                @for (item of spotlightItems(); track item.tmdbId; let index = $index) {
+                @for (item of spotlightItems(); track item.tmdbId + ':' + spotlightCycle(); let index = $index) {
                   <button type="button" class="spotlight-dot" [class.active]="index === activeSpotlightIndex()" [attr.aria-label]="'Mostrar ' + item.title" [attr.aria-current]="index === activeSpotlightIndex() ? 'true' : null" (click)="selectSpotlight(index)"><span></span></button>
                 }
               </div>
@@ -90,7 +90,7 @@ import { LibraryApiService } from '../core/library-api.service';
                     <a class="movie-link" [routerLink]="['/catalog', movie.tmdbId]" [attr.aria-label]="'Abrir detalhes de ' + movie.title">
                       <div class="poster">
                         @if (movie.posterPath && !unavailablePosterIds().has(movie.tmdbId)) {
-                          <img [src]="posterUrl(movie)" [alt]="'Pôster de ' + movie.title" (error)="hidePoster(movie)" />
+                          <img [src]="posterUrl(movie)" [alt]="'Pôster de ' + movie.title" loading="lazy" decoding="async" (error)="hidePoster(movie)" />
                         } @else { <span class="poster-placeholder"><i class="ph ph-film-strip"></i></span> }
                       </div>
                       <div class="movie-title-row"><h3>{{ movie.title }}</h3><span><i class="ph-fill ph-star"></i>{{ rating(movie) }}</span></div>
@@ -142,6 +142,7 @@ export class CatalogPage {
   readonly favoriteMovieIds = signal<ReadonlySet<number>>(new Set());
   readonly sortBy = signal<'POPULARITY' | 'RATING' | 'NEWEST' | 'OLDEST' | 'TITLE'>('POPULARITY');
   readonly spotlightIndex = signal(0);
+  readonly spotlightCycle = signal(0);
   readonly sectionTitle = computed(() => {
     if (this.lastSubmittedQuery()) {
       return `Resultados para “${this.lastSubmittedQuery()}”`;
@@ -167,7 +168,7 @@ export class CatalogPage {
 
   constructor() {
     if (typeof window !== 'undefined' && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
-      this.spotlightTimer = setInterval(() => this.nextSpotlight(), 7000);
+      this.resetSpotlightTimer();
       this.destroyRef.onDestroy(() => clearInterval(this.spotlightTimer));
     }
     this.queryChanges.pipe(
@@ -237,24 +238,40 @@ export class CatalogPage {
   }
 
   posterUrl(movie: CatalogMovie): string {
-    return movie.posterPath ? `https://image.tmdb.org/t/p/w500${movie.posterPath}` : '';
+    return movie.posterPath ? `https://image.tmdb.org/t/p/w342${movie.posterPath}` : '';
   }
 
   backdropUrl(movie: CatalogMovie): string {
-    return movie.backdropPath ? `https://image.tmdb.org/t/p/w1920_and_h800_multi_faces${movie.backdropPath}` : '';
+    return movie.backdropPath ? `https://image.tmdb.org/t/p/w1280${movie.backdropPath}` : '';
+  }
+
+  private resetSpotlightTimer(): void {
+    if (typeof window === 'undefined' || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    if (this.spotlightTimer) clearInterval(this.spotlightTimer);
+    this.spotlightCycle.update((cycle) => cycle + 1);
+    this.spotlightTimer = setInterval(() => this.nextSpotlight(), 7000);
   }
 
   previousSpotlight(): void {
     const total = this.spotlightItems().length;
-    if (total) this.spotlightIndex.update((index) => (index - 1 + total) % total);
+    if (total) {
+      this.spotlightIndex.update((index) => (index - 1 + total) % total);
+      this.resetSpotlightTimer();
+    }
   }
 
   nextSpotlight(): void {
     const total = this.spotlightItems().length;
-    if (total) this.spotlightIndex.update((index) => (index + 1) % total);
+    if (total) {
+      this.spotlightIndex.update((index) => (index + 1) % total);
+      this.resetSpotlightTimer();
+    }
   }
 
-  selectSpotlight(index: number): void { this.spotlightIndex.set(index); }
+  selectSpotlight(index: number): void {
+    this.spotlightIndex.set(index);
+    this.resetSpotlightTimer();
+  }
 
   hidePoster(movie: CatalogMovie): void {
     this.unavailablePosterIds.update((ids) => new Set(ids).add(movie.tmdbId));
@@ -308,6 +325,7 @@ export class CatalogPage {
       next: (movies) => {
         this.movies.set(movies);
         this.spotlightIndex.set(0);
+        this.resetSpotlightTimer();
         this.viewState.set('ready');
         this.libraryApi.movieIds().pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
           next: (ids) => this.addedMovieIds.set(new Set(ids)),
