@@ -30,6 +30,32 @@ Na primeira entrega, o Compose sobe Angular, Spring Boot e PostgreSQL. Prowlarr 
 
 As integrações externas ficarão atrás de portas do domínio. O núcleo não dependerá de DTOs do TMDB, Prowlarr ou qBittorrent.
 
+Cada módulo adota arquitetura hexagonal de forma pragmática:
+
+```text
+<modulo>/
+├── domain/                 # modelo e regras sem dependências de framework
+├── application/
+│   ├── port/in/            # casos de uso oferecidos pelo módulo
+│   ├── port/out/           # dependências exigidas pelo módulo
+│   └── service/            # orquestração dos casos de uso
+└── infrastructure/
+    ├── web/                # controllers Spring MVC e DTOs HTTP
+    ├── persistence/        # JPA e PostgreSQL
+    └── <integracao>/       # TMDB, Prowlarr, qBittorrent ou sistema de arquivos
+```
+
+Spring MVC é um adaptador de entrada. JPA, TMDB e os demais serviços são adaptadores de saída. O código de `domain` e `application` não recebe DTOs nem entidades dessas tecnologias.
+
+## Primeira fatia implementada
+
+O módulo `catalog` já oferece:
+
+- `GET /api/catalog/trending?language=pt-BR&page=1`
+- `GET /api/catalog/search?query=<titulo>&language=pt-BR&page=1`
+
+O fluxo consulta o `MovieMetadataProvider`, converte a resposta externa para o modelo `Movie` e atualiza o cache do PostgreSQL por `tmdb_id`. Quando `TMDB_API_TOKEN` não está definido, o adaptador retorna um problema HTTP `503` com uma mensagem de configuração.
+
 ## Decisões iniciais
 
 - Monólito modular para reduzir custo operacional sem misturar responsabilidades.

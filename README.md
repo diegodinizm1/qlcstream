@@ -18,6 +18,13 @@ Aplicativo local para catálogo pessoal de filmes, descoberta de opções de dow
 
 O PostgreSQL fica disponível apenas para os demais contêineres. O endpoint de saúde do backend pode ser consultado em `http://localhost:8080/actuator/health`.
 
+Com `TMDB_API_TOKEN` configurado, o catálogo pode ser consultado em:
+
+```text
+GET http://localhost:8080/api/catalog/trending
+GET http://localhost:8080/api/catalog/search?query=Matrix
+```
+
 ## Desenvolvimento sem Docker
 
 O backend requer Java 21. O frontend requer uma versão de Node suportada pelo Angular 22, preferencialmente Node 26.
