@@ -128,8 +128,20 @@ public class DownloadRow {
         return id;
     }
 
-    public void synchronize(String hash, String state, double currentProgress, long size, long downloaded, long downloadSpeed,
+    public String infoHash() {
+        return infoHash;
+    }
+
+    public void markStatus(String value) {
+        status = value;
+        updatedAt = Instant.now();
+    }
+
+    public boolean synchronize(String hash, String state, double currentProgress, long size, long downloaded, long downloadSpeed,
             long eta, String normalizedStatus) {
+        var changed = !java.util.Objects.equals(infoHash, hash) || !java.util.Objects.equals(engineState, state)
+                || !status.equals(normalizedStatus) || progress.doubleValue() != currentProgress || downloadedBytes != downloaded
+                || downloadSpeedBps != downloadSpeed;
         externalId = hash;
         infoHash = hash;
         engineState = state;
@@ -141,6 +153,7 @@ public class DownloadRow {
         status = normalizedStatus;
         updatedAt = Instant.now();
         lastSyncedAt = updatedAt;
+        return changed;
     }
 
     public void markRemoved() {

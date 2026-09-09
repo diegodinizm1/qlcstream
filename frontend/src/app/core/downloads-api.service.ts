@@ -46,4 +46,8 @@ export class DownloadsApiService {
   enqueue(request: CreateDownloadRequest): Observable<SubmittedDownload> {
     return this.http.post<SubmittedDownload>('/api/downloads', request);
   }
+
+  control(id: string, action: 'pause' | 'resume' | 'cancel'): Observable<void> {
+    return this.http.post<void>(`/api/downloads/${id}/${action.toUpperCase()}`, {});
+  }
 }

@@ -9,6 +9,9 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.http.MediaType;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.ResponseStatus;
 
@@ -18,6 +21,7 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
 
 import dev.qlcstream.downloads.application.DownloadSubmissionService;
+import dev.qlcstream.downloads.application.DownloadControlService;
 import dev.qlcstream.downloads.application.port.in.BrowseDownloadsUseCase;
 import dev.qlcstream.downloads.domain.DownloadSummary;
 
@@ -27,15 +31,30 @@ public class DownloadsController {
 
     private final BrowseDownloadsUseCase browseDownloads;
     private final DownloadSubmissionService submissions;
+    private final DownloadControlService controls;
+    private final DownloadUpdatePublisher updates;
 
-    public DownloadsController(BrowseDownloadsUseCase browseDownloads, DownloadSubmissionService submissions) {
+    public DownloadsController(BrowseDownloadsUseCase browseDownloads, DownloadSubmissionService submissions,
+            DownloadControlService controls, DownloadUpdatePublisher updates) {
         this.browseDownloads = browseDownloads;
         this.submissions = submissions;
+        this.controls = controls;
+        this.updates = updates;
     }
 
     @GetMapping
     List<DownloadResponse> active() {
         return browseDownloads.active().stream().map(DownloadResponse::from).toList();
+    }
+
+    @GetMapping(value = "/events", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    SseEmitter events() { return updates.subscribe(); }
+
+    @PostMapping("/{id}/{action}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    void control(@PathVariable UUID id, @PathVariable DownloadControlService.Action action) {
+        controls.control(id, action);
+        updates.publish();
     }
 
     @PostMapping

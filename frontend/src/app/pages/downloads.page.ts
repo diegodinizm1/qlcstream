@@ -25,7 +25,7 @@ import { DownloadsApiService, DownloadSummary } from '../core/downloads-api.serv
                 @if (download.posterPath) { <img [src]="posterUrl(download)" [alt]="'Pôster de ' + download.movieTitle" /> } @else { <i class="ph ph-film-strip"></i> }
               </a>
               <div class="download-info"><a [routerLink]="['/catalog', download.movieTmdbId]">{{ download.movieTitle }}</a><p>{{ download.releaseTitle }}</p><div class="download-tags"><span>{{ quality(download) }}</span><span>{{ status(download.status) }}</span></div></div>
-              <div class="download-progress"><div><strong>{{ percent(download.progress) }}</strong><span>{{ transferMeta(download) }}</span></div><div class="progress-track"><span [style.width.%]="download.progress * 100"></span></div></div>
+              <div class="download-progress"><div><strong>{{ percent(download.progress) }}</strong><span>{{ transferMeta(download) }}</span></div><div class="progress-track"><span [style.width.%]="download.progress * 100"></span></div><div class="download-actions">@if (download.status === 'PAUSED') { <button class="text-action" type="button" (click)="control(download, 'resume')">Retomar</button> } @else if (canPause(download.status)) { <button class="text-action" type="button" (click)="control(download, 'pause')">Pausar</button> } <button class="text-action danger-action" type="button" (click)="control(download, 'cancel')">Cancelar</button></div></div>
             </article>
           }
         </section>
@@ -45,8 +45,8 @@ export class DownloadsPage {
   readonly downloads = signal<DownloadSummary[]>([]);
   readonly errorMessage = signal('Confira a conexão com o backend e tente novamente.');
 
-  constructor() { this.load(); }
-  load(): void { this.state.set('loading'); this.downloadsApi.active().pipe(takeUntilDestroyed(this.destroyRef)).subscribe({ next: (downloads) => { this.downloads.set(downloads); this.state.set('ready'); }, error: (error: unknown) => { if (error instanceof HttpErrorResponse && error.status === 0) this.errorMessage.set('O backend não está acessível.'); this.state.set('error'); } }); }
+  constructor() { this.load(); this.subscribeToUpdates(); }
+  load(showLoading = true): void { if (showLoading) this.state.set('loading'); this.downloadsApi.active().pipe(takeUntilDestroyed(this.destroyRef)).subscribe({ next: (downloads) => { this.downloads.set(downloads); this.state.set('ready'); }, error: (error: unknown) => { if (error instanceof HttpErrorResponse && error.status === 0) this.errorMessage.set('O backend não está acessível.'); this.state.set('error'); } }); }
   posterUrl(download: DownloadSummary): string { return `https://image.tmdb.org/t/p/w185${download.posterPath}`; }
   percent(progress: number): string { return `${Math.round(progress * 100)}%`; }
   quality(download: DownloadSummary): string { return [download.resolutionHeight ? `${download.resolutionHeight}p` : null, download.sourceType, download.dynamicRange].filter(Boolean).join(' · ') || 'Qualidade não informada'; }
@@ -55,6 +55,16 @@ export class DownloadsPage {
     if (download.status === 'SEEDING') return 'Concluído e compartilhando';
     if (download.status === 'COMPLETED') return 'Concluído';
     return [download.downloadSpeedBps ? `${this.formatBytes(download.downloadSpeedBps)}/s` : null, download.etaSeconds ? `restam ${this.formatEta(download.etaSeconds)}` : null].filter(Boolean).join(' · ') || 'Aguardando atualização';
+  }
+  canPause(status: string): boolean { return ['METADATA', 'QUEUED', 'DOWNLOADING', 'STALLED', 'CHECKING'].includes(status); }
+  control(download: DownloadSummary, action: 'pause' | 'resume' | 'cancel'): void {
+    if (action === 'cancel' && !confirm(`Cancelar “${download.movieTitle}” no qBittorrent? O arquivo já salvo será mantido.`)) return;
+    this.downloadsApi.control(download.id, action).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({ next: () => this.load(false), error: () => this.errorMessage.set('Não foi possível executar esta ação no qBittorrent.') });
+  }
+  private subscribeToUpdates(): void {
+    const source = new EventSource('/api/downloads/events');
+    source.addEventListener('downloads-changed', () => this.load(false));
+    this.destroyRef.onDestroy(() => source.close());
   }
   private formatBytes(bytes: number): string { return bytes >= 1_000_000_000 ? `${(bytes / 1_000_000_000).toFixed(1)} GB` : `${Math.max(1, Math.round(bytes / 1_000_000))} MB`; }
   private formatEta(seconds: number): string { return seconds >= 3600 ? `${Math.ceil(seconds / 3600)}h` : `${Math.max(1, Math.ceil(seconds / 60))}min`; }

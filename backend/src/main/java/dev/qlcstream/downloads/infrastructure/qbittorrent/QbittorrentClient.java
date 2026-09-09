@@ -74,6 +74,22 @@ public class QbittorrentClient {
         }
     }
 
+    public void pause(String hash) { command("/api/v2/torrents/pause", hash); }
+    public void resume(String hash) { command("/api/v2/torrents/resume", hash); }
+
+    private void command(String path, String hash) {
+        if (hash == null || hash.isBlank()) throw new QbittorrentUnavailableException("O torrent não possui identificador.");
+        try {
+            var response = post(authenticatedClient(), path, Map.of("hashes", hash));
+            if (response.statusCode() < 200 || response.statusCode() >= 300) throw new QbittorrentUnavailableException("O qBittorrent recusou a ação.");
+        } catch (IOException exception) {
+            throw new QbittorrentUnavailableException("Não foi possível alcançar o qBittorrent.", exception);
+        } catch (InterruptedException exception) {
+            Thread.currentThread().interrupt();
+            throw new QbittorrentUnavailableException("A comunicação com o qBittorrent foi interrompida.", exception);
+        }
+    }
+
     private HttpClient authenticatedClient() throws IOException, InterruptedException {
         var client = HttpClient.newBuilder().cookieHandler(new CookieManager(null, CookiePolicy.ACCEPT_ALL))
                 .connectTimeout(Duration.ofSeconds(5)).build();

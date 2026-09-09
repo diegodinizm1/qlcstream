@@ -12,6 +12,7 @@
 .download-progress > div:first-child { display: flex; justify-content: space-between; gap: 14px; margin-bottom: 8px; font-size: 12px; }
 .download-progress strong { color: var(--accent); }
 .download-progress span { color: var(--muted); }
+.download-actions { display: flex; justify-content: flex-end; gap: 12px; margin-top: 10px; }.download-actions .text-action { border: 0; padding: 0; background: transparent; cursor: pointer; }.download-actions .danger-action { color: var(--danger); }
 .progress-track { height: 5px; overflow: hidden; border-radius: 4px; background: var(--surface-3); }
 .progress-track span { display: block; height: 100%; border-radius: inherit; background: var(--accent); }
 .empty-downloads, .downloads-state { min-height: 260px; display: flex; align-items: center; gap: 20px; padding: 34px; border: 1px solid var(--line); border-radius: var(--radius-md); background: var(--surface); }
