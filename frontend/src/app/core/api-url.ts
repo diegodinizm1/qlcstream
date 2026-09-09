@@ -1,6 +1,6 @@
 const DESKTOP_API_ORIGIN = 'http://127.0.0.1:8080';
 
-function isDesktopApp(): boolean {
+export function isDesktopApp(): boolean {
   return typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
 }
 

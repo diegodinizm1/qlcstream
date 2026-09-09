@@ -4,6 +4,8 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { RouterLink } from '@angular/router';
 
 import { LibraryApiService, LibraryItem } from '../core/library-api.service';
+import { DesktopFileService } from '../core/desktop-file.service';
+import { isDesktopApp } from '../core/api-url';
 
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -26,7 +28,7 @@ import { LibraryApiService, LibraryItem } from '../core/library-api.service';
       } @else if (filteredItems().length) {
         <section class="library-list" aria-label="Arquivos disponíveis">
           @for (item of filteredItems(); track item.id) {
-            <article class="library-row"><a [routerLink]="['/catalog', item.movieTmdbId]" class="library-poster">@if (item.posterPath) { <img [src]="posterUrl(item)" [alt]="'Pôster de ' + item.movieTitle" /> } @else { <i class="ph ph-film-strip"></i> }</a><div><a [routerLink]="['/catalog', item.movieTmdbId]">{{ item.movieTitle }}</a><p>{{ item.relativePath }}</p><span>{{ quality(item) }}</span></div><div class="library-actions"><strong>{{ size(item.sizeBytes) }}</strong><button class="icon-button delete-file" type="button" [disabled]="deletingId() === item.id" [attr.aria-label]="'Excluir ' + item.movieTitle" (click)="remove(item)"><i class="ph ph-trash"></i></button></div></article>
+            <article class="library-row"><a [routerLink]="['/catalog', item.movieTmdbId]" class="library-poster">@if (item.posterPath) { <img [src]="posterUrl(item)" [alt]="'Pôster de ' + item.movieTitle" /> } @else { <i class="ph ph-film-strip"></i> }</a><div><a [routerLink]="['/catalog', item.movieTmdbId]">{{ item.movieTitle }}</a><p>{{ item.relativePath }}</p><span>{{ quality(item) }}</span></div><div class="library-actions"><strong>{{ size(item.sizeBytes) }}</strong>@if (desktop()) { <button class="icon-button" type="button" [disabled]="desktopActionId() === item.id" [attr.aria-label]="'Abrir ' + item.movieTitle + ' no VLC'" (click)="openInVlc(item)"><i class="ph ph-play"></i></button><button class="icon-button" type="button" [disabled]="desktopActionId() === item.id" [attr.aria-label]="'Mostrar ' + item.movieTitle + ' no Finder'" (click)="revealInFinder(item)"><i class="ph ph-folder-open"></i></button> }<button class="icon-button delete-file" type="button" [disabled]="deletingId() === item.id" [attr.aria-label]="'Excluir ' + item.movieTitle" (click)="remove(item)"><i class="ph ph-trash"></i></button></div></article>
           }
         </section>
       } @else if (items().length) {
@@ -39,6 +41,7 @@ import { LibraryApiService, LibraryItem } from '../core/library-api.service';
 })
 export class LibraryPage {
   private readonly libraryApi = inject(LibraryApiService);
+  private readonly desktopFile = inject(DesktopFileService);
   private readonly destroyRef = inject(DestroyRef);
   readonly state = signal<'loading' | 'ready' | 'error'>('loading');
   readonly items = signal<LibraryItem[]>([]);
@@ -51,6 +54,8 @@ export class LibraryPage {
   });
   readonly errorMessage = signal('Confira a conexão com o backend e tente novamente.');
   readonly deletingId = signal<number | null>(null);
+  readonly desktop = signal(isDesktopApp());
+  readonly desktopActionId = signal<number | null>(null);
 
   constructor() { this.load(); }
   updateQuery(event: Event): void { this.query.set((event.target as HTMLInputElement).value); }
@@ -62,5 +67,12 @@ export class LibraryPage {
     if (!confirm(`Excluir o arquivo local de “${item.movieTitle}”? Esta ação não pode ser desfeita.`)) return;
     this.deletingId.set(item.id);
     this.libraryApi.remove(item.id).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({ next: () => { this.items.update((items) => items.filter((current) => current.id !== item.id)); this.deletingId.set(null); }, error: () => { this.errorMessage.set('Não foi possível excluir este arquivo.'); this.deletingId.set(null); } });
+  }
+  openInVlc(item: LibraryItem): void { this.runDesktopAction(item, () => this.desktopFile.openInVlc(item.relativePath)); }
+  revealInFinder(item: LibraryItem): void { this.runDesktopAction(item, () => this.desktopFile.revealInFinder(item.relativePath)); }
+  private runDesktopAction(item: LibraryItem, action: () => Promise<void>): void {
+    this.desktopActionId.set(item.id);
+    action().catch(() => this.errorMessage.set('Não foi possível acessar esse arquivo local. Confira se o Docker e o VLC estão ativos.'))
+      .finally(() => this.desktopActionId.set(null));
   }
 }
