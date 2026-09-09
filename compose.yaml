@@ -48,5 +48,34 @@ services:
       - backend
     restart: unless-stopped
 
+  prowlarr:
+    image: lscr.io/linuxserver/prowlarr:latest
+    environment:
+      PUID: 1000
+      PGID: 1000
+      TZ: America/Fortaleza
+    volumes:
+      - ./data/prowlarr:/config
+    ports:
+      - "127.0.0.1:9696:9696"
+    restart: unless-stopped
+
+  qbittorrent:
+    image: lscr.io/linuxserver/qbittorrent:latest
+    environment:
+      PUID: 1000
+      PGID: 1000
+      TZ: America/Fortaleza
+      WEBUI_PORT: 8080
+      TORRENTING_PORT: 6881
+    volumes:
+      - ./data/qbittorrent:/config
+      - ${MEDIA_HOST_PATH:-./data/media}:/downloads
+    ports:
+      - "127.0.0.1:8081:8080"
+      - "6881:6881"
+      - "6881:6881/udp"
+    restart: unless-stopped
+
 volumes:
   postgres_data:
