@@ -20,5 +20,6 @@
 .storage-form p { grid-column: 1 / -1; display: flex; gap: 8px; margin: 0; color: var(--muted); font-size: 11px; line-height: 1.5; }
 .storage-form code, .mono { font-family: var(--mono); }
 .storage-form .btn { justify-self: start; }
+.storage-message { color: var(--accent) !important; }
 @media (max-width: 700px) { .settings-layout { grid-template-columns: 1fr; gap: 24px; } .settings-layout > aside { position: static; flex-direction: row; overflow-x: auto; } .settings-content { gap: 34px; } }
 @media (max-width: 520px) { .integration-list article { grid-template-columns: 42px 1fr; } .connection { grid-column: 2; } .storage-form { grid-template-columns: 1fr; padding: 16px; } .storage-form p { grid-column: auto; } }

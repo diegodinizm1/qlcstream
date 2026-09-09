@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, DestroyRef, inject, signal } from '
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 
 import { IntegrationStatus, SystemApiService } from '../core/system-api.service';
+import { LibraryApiService } from '../core/library-api.service';
 
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -29,9 +30,11 @@ import { IntegrationStatus, SystemApiService } from '../core/system-api.service'
           <section id="storage">
             <div class="section-heading"><h2>Armazenamento</h2></div>
             <div class="storage-form">
-              <label class="field"><span>Nome do diretório</span><input class="input" value="Biblioteca principal" readonly /></label>
-              <label class="field"><span>Caminho no contêiner</span><input class="input mono" value="/data" readonly /></label>
-              <p><i class="ph ph-info"></i>O caminho do computador é definido por <code>MEDIA_HOST_PATH</code> no ambiente local.</p>
+              <label class="field"><span>Pasta para novos downloads</span><input class="input mono" [value]="downloadDirectory()" (input)="downloadDirectory.set($any($event.target).value)" placeholder="filmes" /></label>
+              <label class="field"><span>Raiz disponível ao contêiner</span><input class="input mono" value="/data" readonly /></label>
+              <p><i class="ph ph-info"></i>A pasta é relativa a <code>/data</code>. Por exemplo, <code>filmes/4k</code>. Novos downloads usarão esse destino.</p>
+              <button class="btn btn-primary" type="button" [disabled]="savingStorage()" (click)="saveStorage()">{{ savingStorage() ? 'Salvando…' : 'Salvar destino' }}</button>
+              @if (storageMessage()) { <p class="storage-message">{{ storageMessage() }}</p> }
             </div>
           </section>
         </div>
@@ -42,15 +45,21 @@ import { IntegrationStatus, SystemApiService } from '../core/system-api.service'
 export class SettingsPage {
   private readonly systemApi = inject(SystemApiService);
   private readonly destroyRef = inject(DestroyRef);
+  private readonly libraryApi = inject(LibraryApiService);
   readonly state = signal<'loading' | 'ready' | 'error'>('loading');
   readonly integrations = signal<IntegrationStatus[]>([]);
+  readonly downloadDirectory = signal('incoming');
+  readonly savingStorage = signal(false);
+  readonly storageMessage = signal<string | null>(null);
   readonly integrationList = [
     { id: 'tmdb' as const, name: 'TMDB', description: 'Metadados, capas e lançamentos.', icon: 'ph ph-film-strip' },
     { id: 'prowlarr' as const, name: 'Prowlarr', description: 'Busca nos indexadores configurados.', icon: 'ph ph-binoculars' },
     { id: 'qbittorrent' as const, name: 'qBittorrent', description: 'Motor de downloads e monitoramento.', icon: 'ph ph-download-simple' },
   ];
 
-  constructor() { this.load(); }
+  constructor() { this.load(); this.loadStorage(); }
   load(): void { this.state.set('loading'); this.systemApi.integrations().pipe(takeUntilDestroyed(this.destroyRef)).subscribe({ next: (integrations) => { this.integrations.set(integrations); this.state.set('ready'); }, error: () => this.state.set('error') }); }
   configured(id: IntegrationStatus['id']): boolean { return this.integrations().some((integration) => integration.id === id && integration.configured); }
+  loadStorage(): void { this.libraryApi.storage().pipe(takeUntilDestroyed(this.destroyRef)).subscribe({ next: (storage) => this.downloadDirectory.set(storage.downloadDirectory), error: () => this.storageMessage.set('Não foi possível carregar o destino atual.') }); }
+  saveStorage(): void { this.savingStorage.set(true); this.storageMessage.set(null); this.libraryApi.updateStorage(this.downloadDirectory()).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({ next: (storage) => { this.downloadDirectory.set(storage.downloadDirectory); this.storageMessage.set('Destino salvo para os próximos downloads.'); this.savingStorage.set(false); }, error: () => { this.storageMessage.set('Informe uma pasta relativa válida, como filmes/4k.'); this.savingStorage.set(false); } }); }
 }

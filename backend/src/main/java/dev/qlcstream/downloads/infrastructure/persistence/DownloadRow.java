@@ -91,7 +91,7 @@ public class DownloadRow {
     }
 
     public static DownloadRow queued(long movieId, UUID id, String releaseTitle, String acquisitionRef, String indexerName,
-            Integer resolutionHeight, String sourceType, String dynamicRange) {
+            Integer resolutionHeight, String sourceType, String dynamicRange, String relativeDirectory) {
         var now = Instant.now();
         var row = new DownloadRow();
         row.id = id;
@@ -102,7 +102,7 @@ public class DownloadRow {
         row.indexerName = indexerName;
         row.releaseTitle = releaseTitle;
         row.acquisitionRef = acquisitionRef;
-        row.relativeDirectory = "incoming/" + id;
+        row.relativeDirectory = relativeDirectory;
         row.resolutionHeight = resolutionHeight;
         row.sourceType = sourceType;
         row.dynamicRange = dynamicRange;

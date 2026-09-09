@@ -8,16 +8,20 @@ import org.springframework.transaction.annotation.Transactional;
 import dev.qlcstream.downloads.infrastructure.persistence.DownloadRow;
 import dev.qlcstream.downloads.infrastructure.persistence.SpringDataDownloadRepository;
 import dev.qlcstream.downloads.infrastructure.qbittorrent.QbittorrentClient;
+import dev.qlcstream.library.LocalStorageSettings;
 
 @Service
 public class DownloadSubmissionService {
 
     private final SpringDataDownloadRepository downloads;
     private final QbittorrentClient qbittorrent;
+    private final LocalStorageSettings storageSettings;
 
-    public DownloadSubmissionService(SpringDataDownloadRepository downloads, QbittorrentClient qbittorrent) {
+    public DownloadSubmissionService(SpringDataDownloadRepository downloads, QbittorrentClient qbittorrent,
+            LocalStorageSettings storageSettings) {
         this.downloads = downloads;
         this.qbittorrent = qbittorrent;
+        this.storageSettings = storageSettings;
     }
 
     @Transactional
@@ -28,10 +32,10 @@ public class DownloadSubmissionService {
         }
 
         var id = UUID.randomUUID();
-        var relativeDirectory = "incoming/" + id;
+        var relativeDirectory = storageSettings.downloadDirectory() + "/" + id;
         qbittorrent.add(request.acquisitionRef(), "/downloads/" + relativeDirectory);
         downloads.save(DownloadRow.queued(movieId, id, request.releaseTitle(), request.acquisitionRef(), request.indexerName(),
-                request.resolutionHeight(), request.sourceType(), request.dynamicRange()));
+                request.resolutionHeight(), request.sourceType(), request.dynamicRange(), relativeDirectory));
         return new SubmittedDownload(id, "QUEUED");
     }
 

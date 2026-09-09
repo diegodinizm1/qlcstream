@@ -15,8 +15,13 @@ export interface LibraryItem {
   discoveredAt: string;
 }
 
+export interface StorageSettings { downloadDirectory: string; }
+
 @Injectable({ providedIn: 'root' })
 export class LibraryApiService {
   private readonly http = inject(HttpClient);
   browse(): Observable<LibraryItem[]> { return this.http.get<LibraryItem[]>('/api/library'); }
+  remove(id: number): Observable<void> { return this.http.delete<void>(`/api/library/${id}`); }
+  storage(): Observable<StorageSettings> { return this.http.get<StorageSettings>('/api/library/storage'); }
+  updateStorage(downloadDirectory: string): Observable<StorageSettings> { return this.http.put<StorageSettings>('/api/library/storage', { downloadDirectory }); }
 }
