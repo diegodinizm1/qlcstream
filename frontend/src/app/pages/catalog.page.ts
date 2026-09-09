@@ -1,17 +1,15 @@
-import { ChangeDetectionStrategy, Component, computed, signal } from '@angular/core';
+import { HttpErrorResponse } from '@angular/common/http';
+import { ChangeDetectionStrategy, Component, DestroyRef, computed, inject, signal } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
+import { Observable, Subscription } from 'rxjs';
 
-interface CatalogMovie {
-  title: string;
-  originalTitle: string;
-  year: number;
-  genre: string;
-  rating: string;
-  poster: string;
-}
+import { CatalogApiService, CatalogMovie } from '../core/catalog-api.service';
 
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-catalog-page',
+  imports: [RouterLink],
   styleUrl: './catalog.page.scss',
   template: `
     <section class="spotlight" aria-labelledby="spotlight-title">
@@ -50,7 +48,7 @@ interface CatalogMovie {
 
       <section aria-labelledby="popular-title">
         <div class="section-heading">
-          <h2 id="popular-title">Em alta nesta semana</h2>
+          <h2 id="popular-title">{{ sectionTitle() }}</h2>
           <span class="catalog-count">{{ filteredMovies().length }} filmes</span>
         </div>
 
@@ -62,21 +60,24 @@ interface CatalogMovie {
           }
           @case ('error') {
             <div class="state-message error-state">
-              <i class="ph ph-warning-circle"></i><div><strong>Não foi possível carregar o catálogo.</strong><p>Confira a conexão com o TMDB e tente novamente.</p></div>
-              <button class="btn btn-quiet" type="button" (click)="retry()">Tentar novamente</button>
+              <i class="ph ph-warning-circle"></i><div><strong>Não foi possível carregar o catálogo.</strong><p>{{ errorMessage() }}</p></div>
+              <div class="state-actions">
+                @if (configurationMissing()) { <a class="btn btn-quiet" routerLink="/settings">Configurações</a> }
+                <button class="btn btn-quiet" type="button" (click)="retry()">Tentar novamente</button>
+              </div>
             </div>
           }
           @default {
             @if (filteredMovies().length) {
               <div class="poster-grid">
-                @for (movie of filteredMovies(); track movie.title; let index = $index) {
+                @for (movie of filteredMovies(); track movie.tmdbId; let index = $index) {
                   <article class="movie-card" [style.--delay]="index * 45 + 'ms'">
                     <button class="poster" type="button" [attr.aria-label]="'Abrir ' + movie.title">
-                      <img [src]="movie.poster" [alt]="'Pôster de ' + movie.title" />
+                      <img [src]="posterUrl(movie, index)" [alt]="'Pôster de ' + movie.title" (error)="usePosterFallback($event, index)" />
                       <span class="poster-action"><i class="ph ph-download-simple"></i></span>
                     </button>
-                    <div class="movie-title-row"><h3>{{ movie.title }}</h3><span><i class="ph-fill ph-star"></i>{{ movie.rating }}</span></div>
-                    <p>{{ movie.year }} <span>{{ movie.genre }}</span></p>
+                    <div class="movie-title-row"><h3>{{ movie.title }}</h3><span><i class="ph-fill ph-star"></i>{{ rating(movie) }}</span></div>
+                    <p>{{ year(movie) }} @if (movie.originalTitle && movie.originalTitle !== movie.title) { <span>{{ movie.originalTitle }}</span> }</p>
                   </article>
                 }
               </div>
@@ -93,47 +94,135 @@ interface CatalogMovie {
   `,
 })
 export class CatalogPage {
-  readonly filters = ['Todos', 'Lançamentos', 'Mais bem avaliados', 'Ficção científica', 'Drama'];
+  private readonly catalogApi = inject(CatalogApiService);
+  private readonly destroyRef = inject(DestroyRef);
+  private readonly route = inject(ActivatedRoute);
+  private readonly router = inject(Router);
+  private readonly posterFallbacks = ['/posters/deep-water.png', '/posters/white-mile.png', '/posters/afterimage.png', '/posters/vento-do-alto.png'];
+  private activeRequest?: Subscription;
+
+  readonly filters = ['Todos', 'Lançamentos', 'Mais bem avaliados'];
   readonly skeletons = [1, 2, 3, 4];
   readonly activeFilter = signal('Todos');
   readonly query = signal('');
-  readonly viewState = signal<'ready' | 'loading' | 'error'>('ready');
-
-  private readonly movies: CatalogMovie[] = [
-    { title: 'Maré profunda', originalTitle: 'Deep Water', year: 2026, genre: 'Ficção científica', rating: '8.1', poster: '/posters/deep-water.png' },
-    { title: 'Quilômetro branco', originalTitle: 'White Mile', year: 2025, genre: 'Drama', rating: '7.7', poster: '/posters/white-mile.png' },
-    { title: 'Depois da imagem', originalTitle: 'Afterimage', year: 2026, genre: 'Suspense', rating: '7.9', poster: '/posters/afterimage.png' },
-    { title: 'Vento do alto', originalTitle: 'High Wind', year: 2025, genre: 'Drama', rating: '8.4', poster: '/posters/vento-do-alto.png' },
-  ];
+  readonly viewState = signal<'ready' | 'loading' | 'error'>('loading');
+  readonly errorMessage = signal('Confira a conexão com o backend e tente novamente.');
+  readonly configurationMissing = signal(false);
+  readonly lastSubmittedQuery = signal('');
+  readonly movies = signal<CatalogMovie[]>([]);
+  readonly sectionTitle = computed(() => this.lastSubmittedQuery()
+    ? `Resultados para “${this.lastSubmittedQuery()}”`
+    : 'Em alta nesta semana');
 
   readonly filteredMovies = computed(() => {
-    const term = this.query().trim().toLocaleLowerCase('pt-BR');
     const filter = this.activeFilter();
-    return this.movies.filter((movie) => {
-      const matchesTerm = !term || `${movie.title} ${movie.originalTitle} ${movie.year}`.toLocaleLowerCase('pt-BR').includes(term);
-      const matchesFilter = filter === 'Todos'
-        || (filter === 'Lançamentos' && movie.year === 2026)
-        || (filter === 'Mais bem avaliados' && Number(movie.rating) >= 8)
-        || movie.genre === filter;
-      return matchesTerm && matchesFilter;
+    const currentYear = new Date().getFullYear();
+    return this.movies().filter((movie) => {
+      return filter === 'Todos'
+        || (filter === 'Lançamentos' && this.year(movie) === currentYear)
+        || (filter === 'Mais bem avaliados' && (movie.voteAverage ?? 0) >= 8);
     });
   });
+
+  constructor() {
+    this.route.queryParamMap.pipe(takeUntilDestroyed(this.destroyRef)).subscribe((params) => {
+      const query = params.get('q')?.trim() ?? '';
+      this.query.set(query);
+      if (query) {
+        this.lastSubmittedQuery.set(query);
+        this.load(this.catalogApi.search(query));
+      } else {
+        this.loadTrending();
+      }
+    });
+  }
 
   onQuery(event: Event): void {
     this.query.set((event.target as HTMLInputElement).value);
   }
 
   search(): void {
-    this.viewState.set('loading');
-    window.setTimeout(() => this.viewState.set('ready'), 320);
+    const query = this.query().trim();
+    if (query === this.lastSubmittedQuery()) {
+      this.retry();
+      return;
+    }
+    void this.router.navigate([], {
+      relativeTo: this.route,
+      queryParams: { q: query || null },
+      queryParamsHandling: 'merge',
+    });
   }
 
   retry(): void {
-    this.search();
+    const query = this.lastSubmittedQuery();
+    this.load(query ? this.catalogApi.search(query) : this.catalogApi.trending());
   }
 
   clearSearch(): void {
     this.query.set('');
     this.activeFilter.set('Todos');
+    void this.router.navigate([], {
+      relativeTo: this.route,
+      queryParams: { q: null },
+      queryParamsHandling: 'merge',
+    });
+  }
+
+  posterUrl(movie: CatalogMovie, index: number): string {
+    return movie.posterPath
+      ? `https://image.tmdb.org/t/p/w500${movie.posterPath}`
+      : this.posterFallbacks[index % this.posterFallbacks.length];
+  }
+
+  usePosterFallback(event: Event, index: number): void {
+    const image = event.target as HTMLImageElement;
+    image.onerror = null;
+    image.src = this.posterFallbacks[index % this.posterFallbacks.length];
+  }
+
+  year(movie: CatalogMovie): number | string {
+    return movie.releaseDate ? Number(movie.releaseDate.slice(0, 4)) : 'Sem data';
+  }
+
+  rating(movie: CatalogMovie): string {
+    return movie.voteAverage == null ? 'N/D' : movie.voteAverage.toFixed(1);
+  }
+
+  private loadTrending(): void {
+    this.lastSubmittedQuery.set('');
+    this.load(this.catalogApi.trending());
+  }
+
+  private load(request: Observable<CatalogMovie[]>): void {
+    this.activeRequest?.unsubscribe();
+    this.viewState.set('loading');
+    this.configurationMissing.set(false);
+    this.activeRequest = request.pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
+      next: (movies) => {
+        this.movies.set(movies);
+        this.viewState.set('ready');
+      },
+      error: (error: unknown) => {
+        this.movies.set([]);
+        this.describeError(error);
+        this.viewState.set('error');
+      },
+    });
+  }
+
+  private describeError(error: unknown): void {
+    if (error instanceof HttpErrorResponse && error.status === 503) {
+      this.configurationMissing.set(true);
+      this.errorMessage.set(typeof error.error?.detail === 'string'
+        ? error.error.detail
+        : 'Configure o token do TMDB para carregar o catálogo.');
+      return;
+    }
+    if (error instanceof HttpErrorResponse && error.status === 0) {
+      this.errorMessage.set('O backend local não está respondendo. Confira os serviços do Docker.');
+      return;
+    }
+    this.errorMessage.set('O catálogo não respondeu como esperado. Tente novamente em instantes.');
   }
 }
