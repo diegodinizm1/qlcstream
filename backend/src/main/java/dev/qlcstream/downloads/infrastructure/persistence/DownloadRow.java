@@ -160,6 +160,10 @@ public class DownloadRow {
         return infoHash;
     }
 
+    public String status() { return status; }
+
+    public String releaseTitle() { return releaseTitle; }
+
     public void markStatus(String value) {
         status = value;
         updatedAt = Instant.now();

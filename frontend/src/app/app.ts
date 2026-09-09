@@ -4,6 +4,8 @@ import { ActivatedRoute, Router, RouterLink, RouterLinkActive, RouterOutlet } fr
 import { Subject, catchError, debounceTime, distinctUntilChanged, forkJoin, of, switchMap } from 'rxjs';
 
 import { CatalogApiService, CatalogMovie, CatalogPerson, CatalogSeries } from './core/catalog-api.service';
+import { isDesktopApp } from './core/api-url';
+import { DownloadNotificationsService } from './core/download-notifications.service';
 
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -17,19 +19,24 @@ export class App {
   private readonly route = inject(ActivatedRoute);
   private readonly destroyRef = inject(DestroyRef);
   private readonly catalogApi = inject(CatalogApiService);
+  private readonly downloadNotifications = inject(DownloadNotificationsService);
   private readonly queryChanges = new Subject<string>();
 
   readonly globalQuery = signal('');
+  readonly desktop = signal(isDesktopApp());
   readonly suggestions = signal<CatalogMovie[]>([]);
   readonly peopleSuggestions = signal<CatalogPerson[]>([]);
   readonly seriesSuggestions = signal<CatalogSeries[]>([]);
   readonly autocompleteOpen = signal(false);
   readonly autocompleteState = signal<'idle' | 'loading' | 'ready' | 'error'>('idle');
+  readonly notificationPanelOpen = signal(false);
+  readonly notifications = this.downloadNotifications.notifications;
   readonly theme = signal<'dark' | 'light'>(
     typeof window.matchMedia === 'function' && window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark',
   );
 
   constructor() {
+    this.downloadNotifications.start();
     this.route.queryParamMap.pipe(takeUntilDestroyed(this.destroyRef)).subscribe((params) => {
       this.globalQuery.set(params.get('q') ?? '');
     });
@@ -55,6 +62,18 @@ export class App {
       this.seriesSuggestions.set(series.slice(0, 3));
       if (this.autocompleteState() !== 'error') this.autocompleteState.set('ready');
     });
+  }
+
+  toggleNotifications(): void {
+    this.notificationPanelOpen.update((open) => !open);
+    if (!this.notificationPanelOpen()) return;
+    this.downloadNotifications.markAllRead();
+  }
+
+  clearNotifications(): void { this.downloadNotifications.clear(); }
+
+  notificationTime(date: Date): string {
+    return new Intl.DateTimeFormat('pt-BR', { hour: '2-digit', minute: '2-digit' }).format(date);
   }
 
   toggleTheme(): void {

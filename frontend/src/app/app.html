@@ -1,4 +1,4 @@
-<div class="app-shell" [attr.data-theme]="theme()">
+<div class="app-shell" [class.desktop-window]="desktop()" [attr.data-theme]="theme()">
   <header class="topbar">
     <div class="topbar-inner">
       <a class="brand" routerLink="/catalog" aria-label="QLC Stream">
@@ -30,6 +30,18 @@
       </form>
 
       <div class="topbar-actions">
+        <div class="notifications">
+          <button class="notification-toggle" type="button" (click)="toggleNotifications()" [class.active]="notificationPanelOpen()" aria-label="Notificações" [attr.aria-expanded]="notificationPanelOpen()">
+            <i class="ph ph-bell" aria-hidden="true"></i>
+            @if (notifications().some((notification) => !notification.read)) { <span class="notification-dot"></span> }
+          </button>
+          @if (notificationPanelOpen()) {
+            <section class="notification-panel" aria-label="Notificações de download">
+              <header><div><strong>Notificações</strong><span>Downloads</span></div>@if (notifications().length) { <button type="button" (click)="clearNotifications()">Limpar</button> }</header>
+              @if (notifications().length) { <div class="notification-list">@for (notification of notifications(); track notification.id) { <article [class.error]="notification.type === 'ERROR'"><i class="ph" [class.ph-check-circle]="notification.type === 'COMPLETED'" [class.ph-warning-circle]="notification.type === 'ERROR'"></i><div><strong>{{ notification.title }}</strong><p>{{ notification.message }}</p><time>{{ notificationTime(notification.createdAt) }}</time></div></article> }</div> } @else { <p class="notification-empty">Você receberá avisos quando um download terminar ou precisar de atenção.</p> }
+            </section>
+          }
+        </div>
         <button class="theme-toggle" type="button" (click)="toggleTheme()" [attr.aria-label]="theme() === 'dark' ? 'Usar tema claro' : 'Usar tema escuro'">
           <i [class]="theme() === 'dark' ? 'ph ph-sun' : 'ph ph-moon'" aria-hidden="true"></i>
         </button>

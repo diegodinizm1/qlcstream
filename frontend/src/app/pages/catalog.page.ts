@@ -18,6 +18,7 @@ import { LibraryApiService } from '../core/library-api.service';
         @if (movie.backdropPath) { <img [src]="backdropUrl(movie)" [alt]="'Cena de ' + movie.title" /> }
         <div class="spotlight-shade"></div>
         <div class="spotlight-content">
+          <p class="spotlight-kicker">Em destaque</p>
           <h1 id="spotlight-title">{{ movie.title }}</h1>
           <p class="movie-meta">{{ year(movie) }} <span><i class="ph-fill ph-star"></i>{{ rating(movie) }}</span></p>
           @if (movie.overview) { <p class="spotlight-copy">{{ movie.overview }}</p> }
@@ -25,6 +26,17 @@ import { LibraryApiService } from '../core/library-api.service';
             <a class="btn btn-primary" href="#catalog-search"><i class="ph ph-magnifying-glass"></i>Explorar catálogo</a>
             <a class="btn btn-secondary" [routerLink]="['/catalog', movie.tmdbId]"><i class="ph ph-info"></i>Detalhes</a>
           </div>
+          @if (spotlightItems().length > 1) {
+            <div class="spotlight-carousel" aria-label="Outros filmes em destaque">
+              <button type="button" class="spotlight-arrow" (click)="previousSpotlight()" aria-label="Filme anterior"><i class="ph ph-arrow-left"></i></button>
+              <div class="spotlight-dots">
+                @for (item of spotlightItems(); track item.tmdbId; let index = $index) {
+                  <button type="button" class="spotlight-dot" [class.active]="index === activeSpotlightIndex()" [attr.aria-label]="'Mostrar ' + item.title" [attr.aria-current]="index === activeSpotlightIndex() ? 'true' : null" (click)="selectSpotlight(index)"><span></span></button>
+                }
+              </div>
+              <button type="button" class="spotlight-arrow" (click)="nextSpotlight()" aria-label="Próximo filme"><i class="ph ph-arrow-right"></i></button>
+            </div>
+          }
         </div>
       </section>
     }
@@ -107,6 +119,7 @@ export class CatalogPage {
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
   private activeRequest?: Subscription;
+  private spotlightTimer?: ReturnType<typeof setInterval>;
   private readonly queryChanges = new Subject<string>();
 
   readonly filters: ReadonlyArray<{ collection: CatalogCollection; label: string }> = [
@@ -128,13 +141,19 @@ export class CatalogPage {
   readonly addedMovieIds = signal<ReadonlySet<number>>(new Set());
   readonly favoriteMovieIds = signal<ReadonlySet<number>>(new Set());
   readonly sortBy = signal<'POPULARITY' | 'RATING' | 'NEWEST' | 'OLDEST' | 'TITLE'>('POPULARITY');
+  readonly spotlightIndex = signal(0);
   readonly sectionTitle = computed(() => {
     if (this.lastSubmittedQuery()) {
       return `Resultados para “${this.lastSubmittedQuery()}”`;
     }
     return this.filters.find((filter) => filter.collection === this.activeFilter())?.label ?? 'Catálogo';
   });
-  readonly spotlightMovie = computed(() => this.movies().find((movie) => Boolean(movie.backdropPath)) ?? this.movies()[0]);
+  readonly spotlightItems = computed(() => this.movies().filter((movie) => Boolean(movie.backdropPath)).slice(0, 5));
+  readonly activeSpotlightIndex = computed(() => {
+    const total = this.spotlightItems().length;
+    return total ? this.spotlightIndex() % total : 0;
+  });
+  readonly spotlightMovie = computed(() => this.spotlightItems()[this.activeSpotlightIndex()] ?? this.movies()[0]);
   readonly displayedMovies = computed(() => {
     const movies = [...this.movies()];
     switch (this.sortBy()) {
@@ -147,6 +166,10 @@ export class CatalogPage {
   });
 
   constructor() {
+    if (typeof window !== 'undefined' && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      this.spotlightTimer = setInterval(() => this.nextSpotlight(), 7000);
+      this.destroyRef.onDestroy(() => clearInterval(this.spotlightTimer));
+    }
     this.queryChanges.pipe(
       debounceTime(260),
       distinctUntilChanged(),
@@ -218,8 +241,20 @@ export class CatalogPage {
   }
 
   backdropUrl(movie: CatalogMovie): string {
-    return movie.backdropPath ? `https://image.tmdb.org/t/p/w1280${movie.backdropPath}` : '';
+    return movie.backdropPath ? `https://image.tmdb.org/t/p/w1920_and_h800_multi_faces${movie.backdropPath}` : '';
   }
+
+  previousSpotlight(): void {
+    const total = this.spotlightItems().length;
+    if (total) this.spotlightIndex.update((index) => (index - 1 + total) % total);
+  }
+
+  nextSpotlight(): void {
+    const total = this.spotlightItems().length;
+    if (total) this.spotlightIndex.update((index) => (index + 1) % total);
+  }
+
+  selectSpotlight(index: number): void { this.spotlightIndex.set(index); }
 
   hidePoster(movie: CatalogMovie): void {
     this.unavailablePosterIds.update((ids) => new Set(ids).add(movie.tmdbId));
@@ -272,6 +307,7 @@ export class CatalogPage {
     this.activeRequest = request.pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
       next: (movies) => {
         this.movies.set(movies);
+        this.spotlightIndex.set(0);
         this.viewState.set('ready');
         this.libraryApi.movieIds().pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
           next: (ids) => this.addedMovieIds.set(new Set(ids)),

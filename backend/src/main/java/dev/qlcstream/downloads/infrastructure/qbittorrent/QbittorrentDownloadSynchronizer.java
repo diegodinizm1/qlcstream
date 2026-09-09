@@ -41,8 +41,14 @@ public class QbittorrentDownloadSynchronizer {
             var torrent = torrentsByPath.get("/downloads/" + download.relativeDirectory());
             if (torrent != null) {
                 var status = statusFor(torrent.state());
+                var previousStatus = download.status();
                 changed |= download.synchronize(torrent.hash(), torrent.state(), torrent.progress(), torrent.size(), torrent.downloaded(),
                         torrent.downloadSpeedBps(), torrent.eta(), status);
+                if ((status.equals("SEEDING") || status.equals("COMPLETED")) && !isCompleted(previousStatus)) {
+                    updates.publishNotification("COMPLETED", "Download concluído", download.releaseTitle());
+                } else if (status.equals("ERROR") && !previousStatus.equals("ERROR")) {
+                    updates.publishNotification("ERROR", "Não foi possível concluir o download", download.releaseTitle());
+                }
                 if (status.equals("SEEDING") || status.equals("COMPLETED")) {
                     if (download.movieId() != null) {
                         library.registerCompletedDownload(download.movieId(), download.id(), download.relativeDirectory());
@@ -57,10 +63,17 @@ public class QbittorrentDownloadSynchronizer {
                     }
                 }
             } else if (download.infoHash() != null && !download.infoHash().isBlank()) {
-                changed |= download.markMissingFromEngine();
+                if (download.markMissingFromEngine()) {
+                    changed = true;
+                    updates.publishNotification("ERROR", "Download não encontrado", download.releaseTitle());
+                }
             }
         }
         if (changed) updates.publish();
+    }
+
+    private static boolean isCompleted(String status) {
+        return status.equals("SEEDING") || status.equals("COMPLETED");
     }
 
     private static String statusFor(String state) {

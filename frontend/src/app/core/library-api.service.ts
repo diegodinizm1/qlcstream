@@ -20,6 +20,8 @@ export interface LibraryItem {
 export interface StorageSettings { downloadDirectory: string; }
 export interface FavoriteItem { mediaType: 'MOVIE' | 'SERIES'; tmdbId: number; title: string; posterPath: string | null; subtitle: string | null; addedAt: string; }
 export interface FavoriteRequest { title: string; posterPath: string | null; subtitle: string | null; }
+export interface LibraryCollectionItem extends FavoriteItem {}
+export interface LibraryCollection { id: number; name: string; createdAt: string; items: LibraryCollectionItem[]; }
 
 export interface SeriesLibraryItem {
   id: number;
@@ -63,6 +65,11 @@ export class LibraryApiService {
   favorites(): Observable<FavoriteItem[]> { return this.http.get<FavoriteItem[]>(apiUrl('/api/library/favorites')); }
   addFavorite(mediaType: 'MOVIE' | 'SERIES', tmdbId: number, favorite: FavoriteRequest): Observable<void> { return this.http.post<void>(apiUrl(`/api/library/favorites/${mediaType}/${tmdbId}`), favorite); }
   removeFavorite(mediaType: 'MOVIE' | 'SERIES', tmdbId: number): Observable<void> { return this.http.delete<void>(apiUrl(`/api/library/favorites/${mediaType}/${tmdbId}`)); }
+  collections(): Observable<LibraryCollection[]> { return this.http.get<LibraryCollection[]>(apiUrl('/api/library/collections')); }
+  createCollection(name: string): Observable<LibraryCollection> { return this.http.post<LibraryCollection>(apiUrl('/api/library/collections'), { name }); }
+  removeCollection(id: number): Observable<void> { return this.http.delete<void>(apiUrl(`/api/library/collections/${id}`)); }
+  addToCollection(collectionId: number, mediaType: 'MOVIE' | 'SERIES', tmdbId: number, item: FavoriteRequest): Observable<void> { return this.http.post<void>(apiUrl(`/api/library/collections/${collectionId}/items/${mediaType}/${tmdbId}`), item); }
+  removeFromCollection(collectionId: number, mediaType: 'MOVIE' | 'SERIES', tmdbId: number): Observable<void> { return this.http.delete<void>(apiUrl(`/api/library/collections/${collectionId}/items/${mediaType}/${tmdbId}`)); }
   browseSeries(): Observable<SeriesLibraryItem[]> { return this.http.get<SeriesLibraryItem[]>(apiUrl('/api/library/series')); }
   planned(): Observable<PlannedMovie[]> { return this.http.get<PlannedMovie[]>(apiUrl('/api/library/planned')); }
   movieIds(): Observable<number[]> { return this.http.get<number[]>(apiUrl('/api/library/movie-ids')); }

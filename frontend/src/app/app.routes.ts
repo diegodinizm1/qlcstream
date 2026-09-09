@@ -7,6 +7,7 @@ export const routes: Routes = [
   { path: 'series/:tmdbId', loadComponent: () => import('./pages/series-details.page').then((m) => m.SeriesDetailsPage) },
   { path: 'people/:tmdbId', loadComponent: () => import('./pages/person-details.page').then((m) => m.PersonDetailsPage) },
   { path: 'downloads', loadComponent: () => import('./pages/downloads.page').then((m) => m.DownloadsPage) },
+  { path: 'library/collections/:collectionId', loadComponent: () => import('./pages/collection-details.page').then((m) => m.CollectionDetailsPage) },
   { path: 'library', loadComponent: () => import('./pages/library.page').then((m) => m.LibraryPage) },
   { path: 'settings', loadComponent: () => import('./pages/settings.page').then((m) => m.SettingsPage) },
   { path: '', pathMatch: 'full', redirectTo: 'catalog' },

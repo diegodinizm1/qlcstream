@@ -32,4 +32,18 @@ public class DownloadUpdatePublisher {
             }
         }
     }
+
+    public void publishNotification(String type, String title, String message) {
+        var notification = new DownloadNotification(type, title, message);
+        for (var emitter : emitters) {
+            try {
+                emitter.send(SseEmitter.event().name("download-notification").data(notification));
+            } catch (IOException exception) {
+                emitters.remove(emitter);
+            }
+        }
+    }
+
+    public record DownloadNotification(String type, String title, String message) {
+    }
 }

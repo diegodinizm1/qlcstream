@@ -83,6 +83,55 @@ public class LibraryController {
         jdbc.update("DELETE FROM library_favorite WHERE media_type = ? AND tmdb_id = ?", favoriteType(mediaType), tmdbId);
     }
 
+    @GetMapping("/collections")
+    List<CollectionResponse> collections() {
+        return jdbc.query("SELECT id, name, created_at FROM library_collection ORDER BY created_at DESC", (result, row) -> {
+            var id = result.getLong("id");
+            var items = jdbc.query("""
+                    SELECT media_type, tmdb_id, title, poster_path, subtitle, added_at
+                    FROM library_collection_item WHERE collection_id = ? ORDER BY added_at DESC
+                    """, (item, ignored) -> new CollectionItemResponse(item.getString("media_type"), item.getLong("tmdb_id"),
+                    item.getString("title"), item.getString("poster_path"), item.getString("subtitle"),
+                    item.getTimestamp("added_at").toInstant()), id);
+            return new CollectionResponse(id, result.getString("name"), result.getTimestamp("created_at").toInstant(), items);
+        });
+    }
+
+    @PostMapping("/collections")
+    CollectionResponse createCollection(@Valid @RequestBody CollectionRequest request) {
+        var name = request.name().trim();
+        try {
+            var id = jdbc.queryForObject("INSERT INTO library_collection (name) VALUES (?) RETURNING id", Long.class, name);
+            return new CollectionResponse(id, name, java.time.Instant.now(), List.of());
+        } catch (org.springframework.dao.DuplicateKeyException exception) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Já existe uma coleção com esse nome.");
+        }
+    }
+
+    @DeleteMapping("/collections/{collectionId}")
+    void removeCollection(@PathVariable long collectionId) {
+        if (jdbc.update("DELETE FROM library_collection WHERE id = ?", collectionId) == 0) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Coleção não encontrada.");
+        }
+    }
+
+    @PostMapping("/collections/{collectionId}/items/{mediaType}/{tmdbId}")
+    void addCollectionItem(@PathVariable long collectionId, @PathVariable String mediaType, @PathVariable long tmdbId,
+            @Valid @RequestBody FavoriteRequest request) {
+        jdbc.update("""
+                INSERT INTO library_collection_item (collection_id, media_type, tmdb_id, title, poster_path, subtitle)
+                VALUES (?, ?, ?, ?, ?, ?)
+                ON CONFLICT (collection_id, media_type, tmdb_id) DO UPDATE
+                SET title = EXCLUDED.title, poster_path = EXCLUDED.poster_path, subtitle = EXCLUDED.subtitle
+                """, collectionId, favoriteType(mediaType), tmdbId, request.title(), request.posterPath(), request.subtitle());
+    }
+
+    @DeleteMapping("/collections/{collectionId}/items/{mediaType}/{tmdbId}")
+    void removeCollectionItem(@PathVariable long collectionId, @PathVariable String mediaType, @PathVariable long tmdbId) {
+        jdbc.update("DELETE FROM library_collection_item WHERE collection_id = ? AND media_type = ? AND tmdb_id = ?",
+                collectionId, favoriteType(mediaType), tmdbId);
+    }
+
     private String favoriteType(String value) {
         var type = value.toUpperCase(java.util.Locale.ROOT);
         if (!type.equals("MOVIE") && !type.equals("SERIES")) {
@@ -194,6 +243,16 @@ public class LibraryController {
     }
 
     record FavoriteResponse(String mediaType, long tmdbId, String title, String posterPath, String subtitle,
+            java.time.Instant addedAt) {
+    }
+
+    record CollectionRequest(@NotBlank String name) {
+    }
+
+    record CollectionResponse(long id, String name, java.time.Instant createdAt, List<CollectionItemResponse> items) {
+    }
+
+    record CollectionItemResponse(String mediaType, long tmdbId, String title, String posterPath, String subtitle,
             java.time.Instant addedAt) {
     }
 
