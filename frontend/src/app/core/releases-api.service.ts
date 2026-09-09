@@ -7,5 +7,5 @@ export interface ReleaseOption { title: string; protocol: string | null; indexer
 @Injectable({ providedIn: 'root' })
 export class ReleasesApiService {
   private readonly http = inject(HttpClient);
-  search(query: string): Observable<ReleaseOption[]> { return this.http.get<ReleaseOption[]>('/api/search/releases', { params: { query } }); }
+  search(query: string, year: string): Observable<ReleaseOption[]> { return this.http.get<ReleaseOption[]>('/api/search/releases', { params: { query, year } }); }
 }

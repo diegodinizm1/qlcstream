@@ -2,6 +2,9 @@ package dev.qlcstream.search;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Comparator;
+import java.util.Locale;
+import java.util.regex.Pattern;
 
 import jakarta.validation.constraints.NotBlank;
 import org.springframework.http.HttpHeaders;
@@ -25,12 +28,29 @@ public class ProwlarrSearchController {
     }
 
     @GetMapping("/releases")
-    List<ReleaseResponse> releases(@RequestParam @NotBlank String query) {
+    List<ReleaseResponse> releases(@RequestParam @NotBlank String query, @RequestParam(required = false) Integer year) {
         if (!properties.configured()) throw new IllegalStateException("Prowlarr não está configurado.");
         var response = client.get().uri(uri -> uri.path("/api/v1/search").queryParam("query", query).build())
                 .header("X-Api-Key", properties.apiKey()).retrieve().body(ProwlarrRelease[].class);
         if (response == null) return List.of();
-        return java.util.Arrays.stream(response).map(ReleaseResponse::from).toList();
+        return java.util.Arrays.stream(response).filter(release -> isMovieRelease(release, year))
+                .sorted(Comparator.comparingInt((ProwlarrRelease release) -> score(release, year)).reversed())
+                .map(ReleaseResponse::from).toList();
+    }
+
+    private static final Pattern EPISODE = Pattern.compile("(?i)\\b(s\\d{1,2}(e\\d{1,2})?|season\\s*\\d+)\\b");
+    private static boolean isMovieRelease(ProwlarrRelease release, Integer year) {
+        var title = release.title() == null ? "" : release.title();
+        return !EPISODE.matcher(title).find() && (year == null || title.contains(String.valueOf(year)));
+    }
+    private static int score(ProwlarrRelease release, Integer year) {
+        var title = release.title() == null ? "" : release.title().toLowerCase(Locale.ROOT);
+        var score = release.seeders() == null ? 0 : Math.min(release.seeders(), 500);
+        if (year != null && title.contains(String.valueOf(year))) score += 400;
+        if (title.contains("2160p")) score += 220; else if (title.contains("1080p")) score += 160; else if (title.contains("720p")) score += 80;
+        if (title.contains("web-dl") || title.contains("bluray")) score += 60;
+        if (title.contains("hdr")) score += 25;
+        return score;
     }
 
     record ProwlarrRelease(String title, String protocol, String indexer, Long size, Integer seeders, Integer leechers,

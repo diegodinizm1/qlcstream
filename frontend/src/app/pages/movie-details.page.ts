@@ -94,7 +94,7 @@ export class MovieDetailsPage {
   rating(movie: MovieDetails): string {
     return movie.voteAverage == null ? 'N/D' : movie.voteAverage.toFixed(1);
   }
-  openReleases(movie: MovieDetails): void { this.showReleases.set(true); this.releaseState.set('loading'); this.releasesApi.search(movie.title).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({ next: (releases) => { this.releases.set(releases); this.releaseState.set('ready'); }, error: () => this.releaseState.set('error') }); }
+  openReleases(movie: MovieDetails): void { this.showReleases.set(true); this.releaseState.set('loading'); const query = `${movie.originalTitle || movie.title} ${this.year(movie)}`; this.releasesApi.search(query, this.year(movie)).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({ next: (releases) => { this.releases.set(releases); this.releaseState.set('ready'); }, error: () => this.releaseState.set('error') }); }
   closeReleases(): void { this.showReleases.set(false); }
   size(bytes: number | null): string { return bytes ? `${(bytes / 1_000_000_000).toFixed(1)} GB` : 'Tamanho não informado'; }
 
