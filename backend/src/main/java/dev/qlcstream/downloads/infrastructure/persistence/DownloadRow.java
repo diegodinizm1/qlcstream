@@ -162,6 +162,8 @@ public class DownloadRow {
 
     public String status() { return status; }
 
+    public boolean wasSubmittedBefore(Instant cutoff) { return createdAt.isBefore(cutoff); }
+
     public String releaseTitle() { return releaseTitle; }
 
     public void markStatus(String value) {
@@ -195,7 +197,7 @@ public class DownloadRow {
     }
 
     public boolean markMissingFromEngine() {
-        if ("ERROR".equals(status)) {
+        if ("ERROR".equals(status) && "missing".equals(engineState)) {
             return false;
         }
         status = "ERROR";

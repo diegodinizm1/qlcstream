@@ -2,10 +2,12 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { ChangeDetectionStrategy, Component, DestroyRef, computed, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
-import { Observable, Subject, Subscription, debounceTime, distinctUntilChanged } from 'rxjs';
+import { Observable, Subject, Subscription, catchError, debounceTime, forkJoin, map, of, switchMap } from 'rxjs';
 
-import { CatalogApiService, CatalogCollection, CatalogMovie } from '../core/catalog-api.service';
+import { CatalogApiService, CatalogCollection, CatalogMovie, CatalogPageResponse, CatalogSort, PersonalizedRecommendation } from '../core/catalog-api.service';
+import { tmdbImage, tmdbPosterSrcset } from '../core/tmdb-image';
 import { LibraryApiService } from '../core/library-api.service';
+import { CatalogNavigationSnapshot, CatalogNavigationStateService } from '../core/catalog-navigation-state.service';
 
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -41,6 +43,23 @@ import { LibraryApiService } from '../core/library-api.service';
       </section>
     }
 
+    @if (recommendedForYou().length) {
+        <section class="personalized-recommendations" aria-labelledby="recommendations-title">
+          <div class="recommendations-heading">
+            <div><p>DA SUA BIBLIOTECA</p><h2 id="recommendations-title">Recomendados para você</h2></div>
+            <div class="recommendations-actions"><span>Baseado nos seus filmes e séries</span><button type="button" (click)="moreRecommendations()"><i class="ph ph-arrows-clockwise"></i>{{ refreshingRecommendations() ? 'Atualizando…' : 'Mais recomendações' }}</button></div>
+          </div>
+          <div class="recommendations-rail">
+            @for (item of recommendedForYou(); track item.mediaType + ':' + item.tmdbId) {
+              <a class="recommendation-card" [routerLink]="[item.mediaType === 'SERIES' ? '/series' : '/catalog', item.tmdbId]">
+                <div class="recommendation-poster">@if (item.posterPath) { <img [src]="posterUrl(item)" [attr.srcset]="posterSrcset(item)" sizes="150px" [alt]="'Pôster de ' + item.title" loading="lazy" decoding="async" /> } @else { <i class="ph" [class.ph-film-strip]="item.mediaType === 'MOVIE'" [class.ph-television]="item.mediaType === 'SERIES'"></i> }</div>
+                <small>{{ item.mediaType === 'SERIES' ? 'SÉRIE' : 'FILME' }}</small><strong>{{ item.title }}</strong><span>{{ year(item) }} · <i class="ph-fill ph-star"></i>{{ rating(item) }}</span>
+              </a>
+            }
+          </div>
+        </section>
+      }
+
     <div class="page catalog-content">
       <section class="discovery" aria-labelledby="discovery-title">
         <div class="discovery-copy">
@@ -64,7 +83,7 @@ import { LibraryApiService } from '../core/library-api.service';
       <section aria-labelledby="popular-title">
         <div class="section-heading">
           <h2 id="popular-title">{{ sectionTitle() }}</h2>
-          <div class="catalog-tools"><span class="catalog-count">{{ displayedMovies().length }} filmes</span><label class="catalog-sort"><span>Ordenar</span><select [value]="sortBy()" (change)="setSort($event)"><option value="POPULARITY">Popularidade</option><option value="RATING">Melhor nota</option><option value="NEWEST">Lançamentos recentes</option><option value="OLDEST">Ano mais antigo</option><option value="TITLE">Título A-Z</option></select></label></div>
+          <div class="catalog-tools"><span class="catalog-count">{{ displayedMovies().length }} filmes</span>@if (!lastSubmittedQuery()) { <label class="catalog-sort"><span>Ordenar</span><select [value]="sortBy()" (change)="setSort($event)"><option value="POPULARITY">Popularidade</option><option value="RATING">Melhor nota</option><option value="NEWEST">Lançamentos recentes</option><option value="OLDEST">Ano mais antigo</option><option value="TITLE">Título A-Z</option></select></label> }</div>
         </div>
 
         @switch (viewState()) {
@@ -90,7 +109,7 @@ import { LibraryApiService } from '../core/library-api.service';
                     <a class="movie-link" [routerLink]="['/catalog', movie.tmdbId]" [attr.aria-label]="'Abrir detalhes de ' + movie.title">
                       <div class="poster">
                         @if (movie.posterPath && !unavailablePosterIds().has(movie.tmdbId)) {
-                          <img [src]="posterUrl(movie)" [alt]="'Pôster de ' + movie.title" loading="lazy" decoding="async" (error)="hidePoster(movie)" />
+                          <img [src]="posterUrl(movie)" [attr.srcset]="posterSrcset(movie)" sizes="(max-width: 700px) 44vw, 210px" [alt]="'Pôster de ' + movie.title" loading="lazy" decoding="async" (error)="hidePoster(movie)" />
                         } @else { <span class="poster-placeholder"><i class="ph ph-film-strip"></i></span> }
                       </div>
                       <div class="movie-title-row"><h3>{{ movie.title }}@if (movie.originalTitle && movie.originalTitle !== movie.title) { <small class="original-title">({{ movie.originalTitle }})</small> }</h3><span><i class="ph-fill ph-star"></i>{{ rating(movie) }}</span></div>
@@ -100,10 +119,15 @@ import { LibraryApiService } from '../core/library-api.service';
                   </article>
                 }
               </div>
+              @if (loadingMoreMovies()) {
+                <div class="poster-grid poster-grid-loading" aria-label="Carregando mais filmes">
+                  @for (item of moreSkeletons; track item) { <div class="poster-skeleton"><span></span><i></i><i></i></div> }
+                </div>
+              }
               @if (hasMoreMovies()) {
                 <div class="load-more-actions">
                   <button class="btn btn-quiet" type="button" [disabled]="loadingMoreMovies()" (click)="loadMore()">
-                    {{ loadingMoreMovies() ? 'Carregando filmes…' : 'Carregar mais filmes' }}
+                    {{ loadingMoreMovies() ? 'Carregando mais filmes…' : 'Carregar mais filmes' }}
                   </button>
                 </div>
               }
@@ -125,9 +149,9 @@ export class CatalogPage {
   private readonly destroyRef = inject(DestroyRef);
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
+  private readonly navigationState = inject(CatalogNavigationStateService);
   private activeRequest?: Subscription;
   private spotlightTimer?: ReturnType<typeof setInterval>;
-  private requestVersion = 0;
   private readonly queryChanges = new Subject<string>();
 
   readonly filters: ReadonlyArray<{ collection: CatalogCollection; label: string }> = [
@@ -137,6 +161,7 @@ export class CatalogPage {
     { collection: 'RECENT', label: 'Lançamentos' },
   ];
   readonly skeletons = [1, 2, 3, 4];
+  readonly moreSkeletons = [1, 2, 3, 4, 5];
   readonly activeFilter = signal<CatalogCollection>('ESTABLISHED');
   readonly query = signal('');
   readonly viewState = signal<'ready' | 'loading' | 'error'>('loading');
@@ -151,8 +176,10 @@ export class CatalogPage {
   readonly currentPage = signal(1);
   readonly loadingMoreMovies = signal(false);
   readonly hasMoreMovies = signal(true);
-  readonly sortTouched = signal(false);
-  readonly sortBy = signal<'POPULARITY' | 'RATING' | 'NEWEST' | 'OLDEST' | 'TITLE'>('POPULARITY');
+  readonly recommendedForYou = signal<PersonalizedRecommendation[]>([]);
+  readonly recommendationPage = signal(0);
+  readonly refreshingRecommendations = signal(false);
+  readonly sortBy = signal<CatalogSort>('POPULARITY');
   readonly spotlightIndex = signal(0);
   readonly spotlightCycle = signal(0);
   readonly sectionTitle = computed(() => {
@@ -167,17 +194,7 @@ export class CatalogPage {
     return total ? this.spotlightIndex() % total : 0;
   });
   readonly spotlightMovie = computed(() => this.spotlightItems()[this.activeSpotlightIndex()] ?? this.movies()[0]);
-  readonly displayedMovies = computed(() => {
-    const movies = [...this.movies()];
-    if (!this.sortTouched()) return movies;
-    switch (this.sortBy()) {
-      case 'RATING': return movies.sort((a, b) => (b.voteAverage ?? -1) - (a.voteAverage ?? -1));
-      case 'NEWEST': return movies.sort((a, b) => (b.releaseDate ?? '').localeCompare(a.releaseDate ?? ''));
-      case 'OLDEST': return movies.sort((a, b) => (a.releaseDate ?? '9999').localeCompare(b.releaseDate ?? '9999'));
-      case 'TITLE': return movies.sort((a, b) => a.title.localeCompare(b.title, 'pt-BR'));
-      default: return movies.sort((a, b) => (b.popularity ?? -1) - (a.popularity ?? -1));
-    }
-  });
+  readonly displayedMovies = computed(() => this.movies());
 
   constructor() {
     if (typeof window !== 'undefined' && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
@@ -186,14 +203,23 @@ export class CatalogPage {
     }
     this.queryChanges.pipe(
       debounceTime(260),
-      distinctUntilChanged(),
       takeUntilDestroyed(this.destroyRef),
     ).subscribe((query) => {
-      this.lastSubmittedQuery.set(query);
-      this.load(query ? this.catalogApi.search(query) : this.catalogApi.discover(this.activeFilter()));
+      if (query !== this.query().replace(/\s+/g, ' ').trim()) return;
+      const normalized = query.length >= 2 ? query : '';
+      if (normalized === this.lastSubmittedQuery()) return;
+      this.lastSubmittedQuery.set(normalized);
+      this.load(normalized.length >= 2 ? this.catalogApi.search(normalized) : this.catalogApi.discover(this.activeFilter(), 'pt-BR', 1, this.sortBy()));
     });
+    this.destroyRef.onDestroy(() => this.saveNavigationState());
     this.route.queryParamMap.pipe(takeUntilDestroyed(this.destroyRef)).subscribe((params) => {
-      const query = params.get('q')?.trim() ?? '';
+      const input = params.get('q')?.replace(/\s+/g, ' ').trim() ?? '';
+      const query = input.length >= 2 ? input : '';
+      const restored = this.navigationState.restoreFor(query);
+      if (restored) {
+        this.restoreNavigationState(restored);
+        return;
+      }
       this.query.set(query);
       if (query) {
         this.lastSubmittedQuery.set(query);
@@ -207,11 +233,12 @@ export class CatalogPage {
   onQuery(event: Event): void {
     const query = (event.target as HTMLInputElement).value;
     this.query.set(query);
-    this.queryChanges.next(query.trim());
+    this.queryChanges.next(query.replace(/\s+/g, ' ').trim());
   }
 
   search(): void {
-    const query = this.query().trim();
+    const input = this.query().replace(/\s+/g, ' ').trim();
+    const query = input.length >= 2 ? input : '';
     if (query === this.lastSubmittedQuery()) {
       this.retry();
       return;
@@ -225,24 +252,24 @@ export class CatalogPage {
 
   retry(): void {
     const query = this.lastSubmittedQuery();
-    this.load(query ? this.catalogApi.search(query) : this.catalogApi.discover(this.activeFilter()));
+    this.load(query ? this.catalogApi.search(query) : this.catalogApi.discover(this.activeFilter(), 'pt-BR', 1, this.sortBy()));
   }
 
   selectFilter(collection: CatalogCollection): void {
-    if (this.lastSubmittedQuery()) {
-      this.activeFilter.set(collection);
-      this.clearSearch();
-      return;
-    }
-    if (collection === this.activeFilter()) {
-      return;
-    }
+    if (collection === this.activeFilter() && !this.query() && !this.lastSubmittedQuery()) return;
     this.activeFilter.set(collection);
-    this.loadCollection();
+    this.sortBy.set(collection === 'TOP_RATED' ? 'RATING' : collection === 'RECENT' ? 'NEWEST' : 'POPULARITY');
+    if (this.query() || this.lastSubmittedQuery()) this.clearSearch();
+    else this.loadCollection();
   }
 
   clearSearch(): void {
     this.query.set('');
+    this.queryChanges.next('');
+    if (!this.route.snapshot.queryParamMap.has('q')) {
+      this.loadTrending();
+      return;
+    }
     void this.router.navigate([], {
       relativeTo: this.route,
       queryParams: { q: null },
@@ -250,12 +277,14 @@ export class CatalogPage {
     });
   }
 
-  posterUrl(movie: CatalogMovie): string {
-    return movie.posterPath ? `https://image.tmdb.org/t/p/w342${movie.posterPath}` : '';
+  posterUrl(movie: CatalogMovie | PersonalizedRecommendation): string {
+    return tmdbImage(movie.posterPath, 'poster-card');
   }
 
+  posterSrcset(movie: CatalogMovie | PersonalizedRecommendation): string { return tmdbPosterSrcset(movie.posterPath); }
+
   backdropUrl(movie: CatalogMovie): string {
-    return movie.backdropPath ? `https://image.tmdb.org/t/p/w1280${movie.backdropPath}` : '';
+    return tmdbImage(movie.backdropPath, 'backdrop-hero');
   }
 
   private resetSpotlightTimer(): void {
@@ -287,27 +316,22 @@ export class CatalogPage {
   }
 
   loadMore(): void {
-    if (this.loadingMoreMovies() || !this.hasMoreMovies()) return;
+    if (this.viewState() !== 'ready' || this.loadingMoreMovies() || !this.hasMoreMovies()) return;
     const nextPage = this.currentPage() + 1;
-    const requestVersion = this.requestVersion;
     const query = this.lastSubmittedQuery();
     const request = query
       ? this.catalogApi.search(query, 'pt-BR', nextPage)
-      : this.catalogApi.discover(this.activeFilter(), 'pt-BR', nextPage);
+      : this.catalogApi.discover(this.activeFilter(), 'pt-BR', nextPage, this.sortBy());
     this.loadingMoreMovies.set(true);
-    request.pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
-      next: (movies) => {
-        if (requestVersion !== this.requestVersion) return;
-        this.movies.update((current) => {
-          const existingIds = new Set(current.map((item) => item.tmdbId));
-          return [...current, ...movies.filter((item) => !existingIds.has(item.tmdbId))];
-        });
-        this.currentPage.set(nextPage);
-        this.hasMoreMovies.set(movies.length >= 20);
+    this.activeRequest = request.pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
+      next: (page) => {
+        this.movies.update((current) => this.uniqueMovies([...current, ...page.items]));
+        this.currentPage.set(page.page);
+        this.hasMoreMovies.set(page.hasNext);
         this.loadingMoreMovies.set(false);
       },
       error: () => {
-        if (requestVersion === this.requestVersion) this.loadingMoreMovies.set(false);
+        this.loadingMoreMovies.set(false);
       },
     });
   }
@@ -316,17 +340,17 @@ export class CatalogPage {
     this.unavailablePosterIds.update((ids) => new Set(ids).add(movie.tmdbId));
   }
 
-  year(movie: CatalogMovie): number | string {
+  year(movie: Pick<CatalogMovie, 'releaseDate'>): number | string {
     return movie.releaseDate ? Number(movie.releaseDate.slice(0, 4)) : 'Sem data';
   }
 
-  rating(movie: CatalogMovie): string {
+  rating(movie: Pick<CatalogMovie, 'voteAverage'>): string {
     return movie.voteAverage == null ? 'N/D' : movie.voteAverage.toFixed(1);
   }
 
   setSort(event: Event): void {
-    this.sortTouched.set(true);
-    this.sortBy.set((event.target as HTMLSelectElement).value as typeof this.sortBy extends () => infer T ? T : never);
+    this.sortBy.set((event.target as HTMLSelectElement).value as CatalogSort);
+    this.retry();
   }
 
   addToLibrary(movie: CatalogMovie): void {
@@ -353,38 +377,100 @@ export class CatalogPage {
   }
 
   private loadCollection(): void {
-    this.load(this.catalogApi.discover(this.activeFilter()));
+    this.load(this.catalogApi.discover(this.activeFilter(), 'pt-BR', 1, this.sortBy()));
   }
 
-  private load(request: Observable<CatalogMovie[]>): void {
-    const requestVersion = ++this.requestVersion;
+  private load(request: Observable<CatalogPageResponse<CatalogMovie>>): void {
     this.activeRequest?.unsubscribe();
     this.viewState.set('loading');
+    this.loadingMoreMovies.set(false);
     this.configurationMissing.set(false);
     this.unavailablePosterIds.set(new Set());
     this.activeRequest = request.pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
-      next: (movies) => {
-        if (requestVersion !== this.requestVersion) return;
-        this.movies.set(this.uniqueMovies(movies));
+      next: (page) => {
+        this.movies.set(this.uniqueMovies(page.items));
         this.spotlightIndex.set(0);
-        this.currentPage.set(1);
-        this.hasMoreMovies.set(movies.length >= 20);
+        this.currentPage.set(page.page);
+        this.hasMoreMovies.set(page.hasNext);
         this.loadingMoreMovies.set(false);
-        this.sortTouched.set(false);
         this.resetSpotlightTimer();
         this.viewState.set('ready');
         this.libraryApi.movieIds().pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
           next: (ids) => this.addedMovieIds.set(new Set(ids)),
         });
         this.libraryApi.favorites().pipe(takeUntilDestroyed(this.destroyRef)).subscribe({ next: (items) => this.favoriteMovieIds.set(new Set(items.filter((item) => item.mediaType === 'MOVIE').map((item) => item.tmdbId))) });
+    this.loadPersonalizedRecommendations();
+        this.loadPersonalizedRecommendations();
       },
       error: (error: unknown) => {
-        if (requestVersion !== this.requestVersion) return;
         this.movies.set([]);
         this.describeError(error);
         this.viewState.set('error');
       },
     });
+  }
+
+  moreRecommendations(): void {
+    if (this.refreshingRecommendations()) return;
+    this.recommendationPage.update((page) => page + 1);
+    this.refreshingRecommendations.set(true);
+    this.loadPersonalizedRecommendations();
+  }
+
+  private loadPersonalizedRecommendations(): void {
+    forkJoin({
+      movies: this.libraryApi.movieIds().pipe(catchError(() => of([]))),
+      plannedSeries: this.libraryApi.plannedSeries().pipe(catchError(() => of([]))),
+      downloadedSeries: this.libraryApi.browseSeries().pipe(catchError(() => of([]))),
+      favorites: this.libraryApi.favorites().pipe(catchError(() => of([]))),
+    }).pipe(
+      map((library) => ({
+        movieIds: [...new Set([...library.movies, ...library.favorites.filter((item) => item.mediaType === 'MOVIE').map((item) => item.tmdbId)])].slice(0, 3),
+        seriesIds: [...new Set([...library.plannedSeries.map((item) => item.tmdbId), ...library.downloadedSeries.map((item) => item.seriesTmdbId), ...library.favorites.filter((item) => item.mediaType === 'SERIES').map((item) => item.tmdbId)])].slice(0, 3),
+      })),
+      switchMap((seed) => seed.movieIds.length || seed.seriesIds.length
+        ? this.catalogApi.recommendations(seed.movieIds, seed.seriesIds, 'pt-BR', this.recommendationPage()).pipe(catchError(() => of([])))
+        : of([])),
+      takeUntilDestroyed(this.destroyRef),
+    ).subscribe((items) => { this.recommendedForYou.set(items); this.refreshingRecommendations.set(false); });
+  }
+
+  private saveNavigationState(): void {
+    if (typeof window === 'undefined' || this.viewState() !== 'ready') return;
+    this.navigationState.save({
+      query: this.query(),
+      lastSubmittedQuery: this.lastSubmittedQuery(),
+      activeFilter: this.activeFilter(),
+      sortBy: this.sortBy(),
+      movies: this.movies(),
+      unavailablePosterIds: [...this.unavailablePosterIds()],
+      currentPage: this.currentPage(),
+      hasMoreMovies: this.hasMoreMovies(),
+      scrollY: window.scrollY,
+    });
+  }
+
+  private restoreNavigationState(snapshot: CatalogNavigationSnapshot): void {
+    this.activeRequest?.unsubscribe();
+    this.query.set(snapshot.query);
+    this.lastSubmittedQuery.set(snapshot.lastSubmittedQuery);
+    this.activeFilter.set(snapshot.activeFilter);
+    this.sortBy.set(snapshot.sortBy);
+    this.movies.set(snapshot.movies);
+    this.unavailablePosterIds.set(new Set(snapshot.unavailablePosterIds));
+    this.currentPage.set(snapshot.currentPage);
+    this.hasMoreMovies.set(snapshot.hasMoreMovies);
+    this.loadingMoreMovies.set(false);
+    this.viewState.set('ready');
+    this.restoreScroll(snapshot.scrollY);
+    this.libraryApi.movieIds().pipe(takeUntilDestroyed(this.destroyRef)).subscribe({ next: (ids) => this.addedMovieIds.set(new Set(ids)) });
+    this.libraryApi.favorites().pipe(takeUntilDestroyed(this.destroyRef)).subscribe({ next: (items) => this.favoriteMovieIds.set(new Set(items.filter((item) => item.mediaType === 'MOVIE').map((item) => item.tmdbId))) });
+    this.loadPersonalizedRecommendations();
+  }
+
+  private restoreScroll(scrollY: number): void {
+    if (typeof window === 'undefined') return;
+    requestAnimationFrame(() => requestAnimationFrame(() => window.scrollTo({ top: scrollY, behavior: 'instant' })));
   }
 
   private uniqueMovies(values: CatalogMovie[]): CatalogMovie[] {
