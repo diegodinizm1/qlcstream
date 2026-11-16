@@ -1,0 +1,149 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [develop, main, integration/qlcstream]
+  push:
+    branches: [develop, main, integration/qlcstream]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backup-restore:
+    name: Backup restore
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Construir ferramenta administrativa explicitamente
+        run: docker build -t qlcstream-backup-helper:1 scripts/backup
+      - name: Validar guardas de montagem logging e parada
+        run: python3 docs/validation/test-backup-command.py
+      - name: Recusar arquivos inseguros e preservar exclusao de midia
+        run: docker run --rm --network none -v "$PWD/docs/validation:/tests:ro" --entrypoint python3 qlcstream-backup-helper:1 /tests/test-backup-package.py
+      - name: Recuperar somente instalacao sintetica isolada
+        run: python3 docs/validation/test-backup-restore.py
+      # No uploads: packages, keys, database/profile snapshots stay private to runner.
+
+  integration-versions:
+    name: Integration versions
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Testar relato de versao e divergencia
+        run: python3 docs/validation/test-version-checker.py
+      - name: Validar imagens reais em rede interna e copia sintetica
+        run: python3 docs/validation/test-integration-versions.py
+      - name: Recusar escapes e troca de diretorios na exclusao
+        run: >-
+          docker run --rm --network none
+          -v "$PWD/backend/docker:/tests/backend/docker:ro"
+          -v "$PWD/docs/validation:/tests/docs/validation:ro"
+          python:3.13-alpine@sha256:9ef1a599f863231c3d91e941389bfdc4a2d6070557243d54df1a4e57015b960e
+          python /tests/docs/validation/test-library-file-delete.py
+      - name: Validar cancelamento tardio exclusao e reconexao SSE
+        run: |
+          docker build -t qlcstream-file-actions-ci backend
+          docker build -t qlcstream-file-actions-web-ci frontend
+          python3 docs/validation/test-integration-file-actions.py --image qlcstream-file-actions-ci --frontend-image qlcstream-file-actions-web-ci --evidence-dir data/file-actions-validation
+      - name: Guardar resultados sinteticos
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: integration-version-results
+          path: |
+            data/versions-validation-*/*.json
+            data/file-actions-validation/*-results.json
+          if-no-files-found: ignore
+          retention-days: 7
+
+  windows-launcher:
+    name: Windows launcher
+    runs-on: windows-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Validar contrato no Windows PowerShell 5.1
+        shell: powershell
+        run: ./docs/validation/Test-WindowsLauncher.ps1
+      - name: Validar contrato no PowerShell 7
+        shell: pwsh
+        run: ./docs/validation/Test-WindowsLauncher.ps1
+
+  backend:
+    name: Backend
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+          cache-dependency-path: backend/pom.xml
+      - name: Testar e verificar backend
+        run: ./mvnw --batch-mode --no-transfer-progress verify
+      - name: Guardar relatórios de testes em caso de falha
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: backend-test-reports
+          path: backend/target/surefire-reports/
+          if-no-files-found: ignore
+          retention-days: 7
+
+  frontend:
+    name: Frontend
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '26'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Instalar dependências pelo lockfile
+        run: npm ci
+      - name: Testar frontend
+        run: |
+          set -o pipefail
+          npm test -- --watch=false 2>&1 | tee frontend-test.log
+      - name: Compilar frontend
+        run: |
+          set -o pipefail
+          npm run build 2>&1 | tee frontend-build.log
+      - name: Guardar relatórios em caso de falha
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: frontend-failure-logs
+          path: |
+            frontend/frontend-test.log
+            frontend/frontend-build.log
+          if-no-files-found: ignore
+          retention-days: 7

@@ -1,4 +1,5 @@
 import { HttpErrorResponse } from '@angular/common/http';
+import { tmdbImage } from '../core/tmdb-image';
 import {
   ChangeDetectionStrategy,
   Component,
@@ -9,7 +10,7 @@ import {
 } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { RouterLink } from '@angular/router';
-import { forkJoin } from 'rxjs';
+import { forkJoin, map } from 'rxjs';
 
 import { CatalogApiService, CatalogMovie, CatalogSeries } from '../core/catalog-api.service';
 
@@ -58,6 +59,10 @@ interface CollectionSearchResult {
         </div>
       </dl>
     </header>
+    @if (actionError()) { <p class="action-error" role="alert">{{ actionError() }}</p> }
+    @if (!desktop()) {
+      <p class="storage-help">Para acessar um arquivo, abra no computador a pasta de mídia escolhida na instalação e siga o caminho mostrado abaixo dele. Abertura no reprodutor e localização automática da pasta estão disponíveis no aplicativo desktop.</p>
+    }
     <label class="library-search"
       ><i class="ph ph-magnifying-glass" aria-hidden="true"></i
       ><span class="sr-only">Buscar na biblioteca</span
@@ -160,7 +165,7 @@ interface CollectionSearchResult {
                           ]"
                         >
                           @if (item.posterPath) {
-                            <img [src]="posterUrl(item)" [alt]="item.title" />
+                            <img [src]="posterUrl(item)" [alt]="item.title" loading="lazy" decoding="async" />
                           } @else {
                             <i class="ph ph-film-strip"></i>
                           }</a
@@ -248,7 +253,7 @@ interface CollectionSearchResult {
                 @for (result of collectionResults(); track result.mediaType + result.tmdbId) {
                   <button type="button" (click)="addSearchResultToCollection(result)">
                     @if (result.posterPath) {
-                      <img [src]="posterUrl(result)" [alt]="" />
+                      <img [src]="posterUrl(result)" [alt]="" loading="lazy" decoding="async" />
                     } @else {
                       <span
                         ><i
@@ -295,7 +300,7 @@ interface CollectionSearchResult {
                   ]"
                 >
                   @if (favorite.posterPath) {
-                    <img [src]="posterUrl(favorite)" [alt]="'Pôster de ' + favorite.title" />
+                    <img [src]="posterUrl(favorite)" loading="lazy" decoding="async" [alt]="'Pôster de ' + favorite.title" />
                   } @else {
                     <span
                       ><i
@@ -338,7 +343,7 @@ interface CollectionSearchResult {
               <article class="planned-film">
                 <a [routerLink]="['/catalog', movie.tmdbId]" class="planned-poster">
                   @if (movie.posterPath) {
-                    <img [src]="posterUrl(movie)" [alt]="'Pôster de ' + movie.title" />
+                    <img [src]="posterUrl(movie)" loading="lazy" decoding="async" [alt]="'Pôster de ' + movie.title" />
                   } @else {
                     <i class="ph ph-film-strip"></i>
                   }
@@ -379,7 +384,7 @@ interface CollectionSearchResult {
               <article class="planned-film">
                 <a [routerLink]="['/series', series.tmdbId]" class="planned-poster">
                   @if (series.posterPath) {
-                    <img [src]="posterUrl(series)" [alt]="'Pôster de ' + series.name" />
+                    <img [src]="posterUrl(series)" loading="lazy" decoding="async" [alt]="'Pôster de ' + series.name" />
                   } @else {
                     <i class="ph ph-television"></i>
                   }
@@ -419,9 +424,10 @@ interface CollectionSearchResult {
           </div>
           <div class="series-library-grid">
             @for (series of filteredAvailableSeries(); track series.tmdbId) {
+              <div class="series-entry">
               <a class="series-library-card" [routerLink]="['/series', series.tmdbId]">
                 @if (series.posterPath) {
-                  <img [src]="posterUrl(series)" [alt]="'Pôster de ' + series.title" />
+                  <img [src]="posterUrl(series)" loading="lazy" decoding="async" [alt]="'Pôster de ' + series.title" />
                 } @else {
                   <span><i class="ph ph-television"></i></span>
                 }
@@ -431,6 +437,18 @@ interface CollectionSearchResult {
                   <small>{{ size(series.sizeBytes) }} armazenados</small>
                 </div></a
               >
+              <div class="series-file-actions">
+                @for (file of series.files; track file.id) {
+                  <div><small>{{ file.relativePath }}</small>
+                    @if (desktop()) {
+                      <button class="text-action" type="button" (click)="openInVlc(file)" [disabled]="desktopActionId() !== null">Abrir no VLC</button>
+                      <button class="text-action" type="button" (click)="revealInFinder(file)" [disabled]="desktopActionId() !== null">Mostrar na pasta</button>
+                    }
+                    <button class="text-action" type="button" (click)="remove(file)" [disabled]="deletingId() !== null">Excluir este arquivo</button>
+                  </div>
+                }
+              </div>
+              </div>
             }
           </div>
         </section>
@@ -475,7 +493,7 @@ interface CollectionSearchResult {
                       class="icon-button"
                       type="button"
                       [disabled]="desktopActionId() === item.id"
-                      [attr.aria-label]="'Mostrar ' + item.movieTitle + ' no Finder'"
+                      [attr.aria-label]="'Mostrar ' + item.movieTitle + ' na pasta'"
                       (click)="revealInFinder(item)"
                     >
                       <i class="ph ph-folder-open"></i>
@@ -557,6 +575,7 @@ export class LibraryPage {
   readonly searchingCollection = signal(false);
   readonly query = signal('');
   readonly errorMessage = signal('Confira a conexão com o backend e tente novamente.');
+  readonly actionError = signal('');
   readonly deletingId = signal<number | null>(null);
   readonly removingTmdbId = signal<number | null>(null);
   readonly removingSeriesId = signal<number | null>(null);
@@ -648,8 +667,8 @@ export class LibraryPage {
     }
     this.searchingCollection.set(true);
     forkJoin({
-      movies: this.catalogApi.search(search),
-      series: this.catalogApi.searchSeries(search),
+      movies: this.catalogApi.search(search).pipe(map((page) => page.items)),
+      series: this.catalogApi.searchSeries(search).pipe(map((page) => page.items)),
     })
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
@@ -834,7 +853,7 @@ export class LibraryPage {
   posterUrl(
     item: LibraryItem | PlannedMovie | PlannedSeries | FavoriteItem | { posterPath: string | null },
   ): string {
-    return `https://image.tmdb.org/t/p/w342${item.posterPath}`;
+    return tmdbImage(item.posterPath, 'poster-card');
   }
   year(movie: PlannedMovie): string {
     return movie.releaseDate ? movie.releaseDate.slice(0, 4) : 'Sem data';
@@ -912,22 +931,24 @@ export class LibraryPage {
         },
       });
   }
-  remove(item: LibraryItem): void {
+  remove(item: LibraryItem | SeriesLibraryItem): void {
+    if (this.deletingId() !== null) return;
+    this.actionError.set('');
     if (this.desktop()) {
-      this.desktopFile.confirmDeletion(item.movieTitle).then((confirmed) => {
+      this.desktopFile.confirmDeletion(item.relativePath).then((confirmed) => {
         if (confirmed) this.deleteFile(item);
-      });
+      }).catch(error => this.actionError.set(this.desktopError(error)));
       return;
     }
     if (
-      confirm(`Excluir o arquivo local de “${item.movieTitle}”? Esta ação não pode ser desfeita.`)
+      confirm(this.desktopFile.deletionMessage(item.relativePath))
     )
       this.deleteFile(item);
   }
-  openInVlc(item: LibraryItem): void {
+  openInVlc(item: LibraryItem | SeriesLibraryItem): void {
     this.runDesktopAction(item, () => this.desktopFile.openInVlc(item.relativePath));
   }
-  revealInFinder(item: LibraryItem): void {
+  revealInFinder(item: LibraryItem | SeriesLibraryItem): void {
     this.runDesktopAction(item, () => this.desktopFile.revealInFinder(item.relativePath));
   }
   private toCollectionMovie(movie: CatalogMovie): CollectionSearchResult {
@@ -952,7 +973,7 @@ export class LibraryPage {
     const query = this.query().trim().toLocaleLowerCase();
     return !query || values.some((value) => value.toLocaleLowerCase().includes(query));
   }
-  private deleteFile(item: LibraryItem): void {
+  private deleteFile(item: LibraryItem | SeriesLibraryItem): void {
     this.deletingId.set(item.id);
     this.libraryApi
       .remove(item.id)
@@ -960,22 +981,26 @@ export class LibraryPage {
       .subscribe({
         next: () => {
           this.items.update((items) => items.filter((current) => current.id !== item.id));
+          this.seriesFiles.update((items) => items.filter((current) => current.id !== item.id));
           this.deletingId.set(null);
         },
-        error: () => {
-          this.errorMessage.set('Não foi possível excluir este arquivo.');
+        error: (error: unknown) => {
+          this.actionError.set(error instanceof HttpErrorResponse && typeof error.error?.detail === 'string'
+            ? error.error.detail : 'Não foi possível concluir a exclusão. Confira o servidor e repita a ação para reconciliar a biblioteca.');
           this.deletingId.set(null);
         },
       });
   }
-  private runDesktopAction(item: LibraryItem, action: () => Promise<void>): void {
+  private runDesktopAction(item: LibraryItem | SeriesLibraryItem, action: () => Promise<void>): void {
+    this.actionError.set('');
     this.desktopActionId.set(item.id);
     action()
-      .catch(() =>
-        this.errorMessage.set(
-          'Não foi possível acessar esse arquivo local. Confira se o Docker e o VLC estão ativos.',
-        ),
-      )
+      .catch(error => this.actionError.set(this.desktopError(error)))
       .finally(() => this.desktopActionId.set(null));
+  }
+
+  private desktopError(error: unknown): string {
+    return typeof error === 'string' && error.length > 0 && error.length < 300
+      ? error : 'Não foi possível acessar o arquivo pelo aplicativo desktop. Confira se ele ainda existe e se o reprodutor está instalado.';
   }
 }

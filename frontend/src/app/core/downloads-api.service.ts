@@ -15,12 +15,23 @@ export interface DownloadSummary {
   sourceType: string | null;
   dynamicRange: string | null;
   status: string;
+  engineState: string | null;
+  canRetry: boolean;
   progress: number;
   totalBytes: number | null;
   downloadedBytes: number;
   downloadSpeedBps: number;
   etaSeconds: number | null;
   createdAt: string;
+}
+
+export interface DownloadQueue {
+  items: DownloadSummary[];
+  sync: {
+    state: 'waiting' | 'available' | 'unavailable';
+    lastSuccessfulAt: string | null;
+    queueingEnabled: boolean;
+  };
 }
 
 export interface CreateDownloadRequest {
@@ -48,13 +59,17 @@ export class DownloadsApiService {
     return this.http.get<DownloadSummary[]>(apiUrl('/api/downloads'));
   }
 
+  queue(): Observable<DownloadQueue> {
+    return this.http.get<DownloadQueue>(apiUrl('/api/downloads/queue'));
+  }
+
   enqueue(request: CreateDownloadRequest): Observable<SubmittedDownload> {
     return this.http.post<SubmittedDownload>(apiUrl('/api/downloads'), request);
   }
 
   enqueueSeries(request: CreateSeriesDownloadRequest): Observable<SubmittedDownload> { return this.http.post<SubmittedDownload>(apiUrl('/api/downloads/series'), request); }
 
-  control(id: string, action: 'pause' | 'resume' | 'cancel'): Observable<void> {
+  control(id: string, action: 'pause' | 'resume' | 'retry' | 'priority_up' | 'priority_down' | 'cancel'): Observable<void> {
     return this.http.post<void>(apiUrl(`/api/downloads/${id}/${action.toUpperCase()}`), {});
   }
 }

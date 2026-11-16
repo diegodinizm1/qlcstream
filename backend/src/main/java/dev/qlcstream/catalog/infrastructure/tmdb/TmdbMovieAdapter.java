@@ -2,18 +2,23 @@ package dev.qlcstream.catalog.infrastructure.tmdb;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.Duration;
 import java.time.format.DateTimeParseException;
 import java.util.List;
 import java.util.Objects;
 import java.util.Comparator;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpHeaders;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
+import org.springframework.web.util.UriBuilder;
 
 import dev.qlcstream.catalog.application.port.out.MovieMetadataProvider;
 import dev.qlcstream.catalog.domain.CatalogCollection;
+import dev.qlcstream.catalog.domain.CatalogPage;
+import dev.qlcstream.catalog.domain.CatalogSort;
 import dev.qlcstream.catalog.domain.Movie;
 import dev.qlcstream.catalog.domain.MovieDetails;
 import dev.qlcstream.catalog.domain.Person;
@@ -23,166 +28,236 @@ import dev.qlcstream.catalog.domain.Series;
 import dev.qlcstream.catalog.domain.SeriesDetails;
 import dev.qlcstream.catalog.domain.SeriesEpisode;
 import dev.qlcstream.catalog.domain.SeriesSeason;
+import dev.qlcstream.system.IntegrationSettings;
 
 @Component
 public class TmdbMovieAdapter implements MovieMetadataProvider {
-
-    private final RestClient client;
     private final TmdbProperties properties;
+    private final TmdbCatalogCache cache;
+    private final IntegrationSettings settings;
+
+    @Autowired
+    TmdbMovieAdapter(TmdbProperties properties, TmdbCatalogCache cache, IntegrationSettings settings) {
+        this.properties = properties;
+        this.cache = cache;
+        this.settings = settings;
+    }
+
+    public TmdbMovieAdapter(TmdbProperties properties, IntegrationSettings settings) {
+        this(properties, new TmdbCatalogCache(300, Duration.ofMinutes(10), Duration.ofMinutes(3)), settings);
+    }
 
     public TmdbMovieAdapter(TmdbProperties properties) {
-        this.properties = properties;
-        this.client = RestClient.builder().baseUrl(properties.baseUrl()).build();
+        this(properties, null);
     }
 
     @Override
-    public List<Movie> trending(String language, int page) {
-        requireConfiguration();
-        var response = client.get()
+    public CatalogPage<Movie> trending(String language, int page, CatalogSort sort) {
+        var configuration = requireConfiguration();
+        return cache.get(cache.key(configuration, "trending-movie", language, page, sort), cache.catalogTtl(), () -> {
+        var response = client(configuration).get()
                 .uri(uri -> uri.path("/trending/movie/week")
                         .queryParam("language", language)
                         .queryParam("page", page)
                         .build())
-                .header(HttpHeaders.AUTHORIZATION, "Bearer " + properties.apiToken())
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + configuration.apiToken())
                 .retrieve()
                 .body(TmdbMoviePage.class);
         return map(response);
+        });
     }
 
     @Override
-    public List<Movie> discover(CatalogCollection collection, String language, int page) {
-        requireConfiguration();
-        var request = client.get()
-                .uri(uri -> {
-                    var builder = uri.path("/discover/movie")
-                            .queryParam("language", language)
-                            .queryParam("page", page)
-                            .queryParam("include_adult", false)
-                            .queryParam("include_video", false);
-                    switch (collection) {
-                        case POPULAR -> builder
-                                .queryParam("sort_by", "popularity.desc")
-                                .queryParam("vote_count.gte", 100);
-                        case TOP_RATED -> builder
-                                .queryParam("sort_by", "vote_average.desc")
-                                .queryParam("vote_count.gte", 500);
-                        case ESTABLISHED -> builder
-                                .queryParam("sort_by", "popularity.desc")
-                                .queryParam("vote_count.gte", 100)
-                                .queryParam("primary_release_date.lte", LocalDate.now().minusYears(2));
-                        case RECENT -> builder
-                                .queryParam("sort_by", "primary_release_date.desc")
-                                .queryParam("primary_release_date.lte", LocalDate.now());
-                    }
-                    return builder.build();
-                })
-                .header(HttpHeaders.AUTHORIZATION, "Bearer " + properties.apiToken())
-                .retrieve()
-                .body(TmdbMoviePage.class);
-        return map(request);
+    public CatalogPage<Movie> discover(CatalogCollection collection, String language, int page, CatalogSort sort) {
+        var configuration = requireConfiguration();
+        return cache.get(cache.key(configuration, "discover-movie", collection, language, page, sort),
+                cache.catalogTtl(), () -> {
+                    var response = client(configuration).get()
+                            .uri(uri -> discoveryQuery(uri.path("/discover/movie").queryParam("include_video", false),
+                                    collection, language, page, sort, "primary_release_date", "title").build())
+                            .header(HttpHeaders.AUTHORIZATION, "Bearer " + configuration.apiToken())
+                            .retrieve().body(TmdbMoviePage.class);
+                    return map(response);
+                });
     }
 
     @Override
-    public List<Movie> search(String query, String language, int page) {
-        requireConfiguration();
-        var response = client.get()
+    public CatalogPage<Series> discoverSeries(CatalogCollection collection, String language, int page, CatalogSort sort) {
+        var configuration = requireConfiguration();
+        return cache.get(cache.key(configuration, "discover-series", collection, language, page, sort),
+                cache.catalogTtl(), () -> {
+                    var response = client(configuration).get()
+                            .uri(uri -> discoveryQuery(uri.path("/discover/tv").queryParam("include_null_first_air_dates", false),
+                                    collection, language, page, sort, "first_air_date", "name").build())
+                            .header(HttpHeaders.AUTHORIZATION, "Bearer " + configuration.apiToken())
+                            .retrieve().body(TmdbSeriesPage.class);
+                    return map(response);
+                });
+    }
+
+    private UriBuilder discoveryQuery(UriBuilder uri, CatalogCollection collection, String language,
+                                      int page, CatalogSort sort, String dateField, String titleField) {
+        var defaultSort = switch (collection) {
+            case TOP_RATED -> CatalogSort.RATING;
+            case RECENT -> CatalogSort.NEWEST;
+            default -> CatalogSort.POPULARITY;
+        };
+        var effectiveSort = sort == null ? defaultSort : sort;
+        String sortBy = switch (effectiveSort) {
+            case POPULARITY -> "popularity.desc";
+            case RATING -> "vote_average.desc";
+            case NEWEST -> dateField + ".desc";
+            case OLDEST -> dateField + ".asc";
+            case TITLE -> titleField + ".asc";
+        };
+        uri.queryParam("language", language).queryParam("page", page)
+                .queryParam("include_adult", false)
+                .queryParam("sort_by", sortBy);
+        switch (collection) {
+            case POPULAR -> uri.queryParam("vote_count.gte", 100);
+            case TOP_RATED -> uri.queryParam("vote_count.gte", 500);
+            case ESTABLISHED -> uri.queryParam("vote_count.gte", 100)
+                    .queryParam(dateField + ".lte", LocalDate.now().minusYears(2));
+            case RECENT -> uri.queryParam(dateField + ".lte", LocalDate.now());
+        }
+        return uri;
+    }
+
+    @Override
+    public CatalogPage<Movie> search(String query, String language, int page, CatalogSort sort) {
+        var configuration = requireConfiguration();
+        return cache.get(cache.key(configuration, "search-movie", query, language, page, sort), cache.searchTtl(), () -> {
+        var response = client(configuration).get()
                 .uri(uri -> uri.path("/search/movie")
                         .queryParam("query", query)
                         .queryParam("language", language)
                         .queryParam("page", page)
                         .queryParam("include_adult", false)
                         .build())
-                .header(HttpHeaders.AUTHORIZATION, "Bearer " + properties.apiToken())
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + configuration.apiToken())
                 .retrieve()
                 .body(TmdbMoviePage.class);
         return map(response);
+        });
     }
 
     @Override
     public MovieDetails details(long tmdbId, String language) {
-        requireConfiguration();
-        var response = client.get()
+        var configuration = requireConfiguration();
+        return cache.get(cache.key(configuration, "movie-details", tmdbId, language), Duration.ofMinutes(30), () -> {
+        var response = client(configuration).get()
             .uri(uri -> uri.path("/movie/{tmdbId}")
                         .queryParam("language", language)
                         .queryParam("append_to_response", "credits,videos,recommendations")
                         .build(tmdbId))
-                .header(HttpHeaders.AUTHORIZATION, "Bearer " + properties.apiToken())
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + configuration.apiToken())
                 .retrieve()
                 .body(TmdbMovieDetails.class);
         if (response == null) {
             throw new IllegalStateException("TMDB não retornou detalhes para o filme solicitado.");
         }
         return response.toDomain();
+        });
     }
 
     @Override
     public List<Person> searchPeople(String query, String language) {
-        requireConfiguration();
-        var response = client.get().uri(uri -> uri.path("/search/person").queryParam("query", query)
+        var configuration = requireConfiguration();
+        var response = client(configuration).get().uri(uri -> uri.path("/search/person").queryParam("query", query)
                 .queryParam("language", language).queryParam("include_adult", false).build())
-                .header(HttpHeaders.AUTHORIZATION, "Bearer " + properties.apiToken()).retrieve().body(TmdbPersonPage.class);
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + configuration.apiToken()).retrieve().body(TmdbPersonPage.class);
         return response == null || response.results() == null ? List.of() : response.results().stream().map(TmdbPerson::toDomain).toList();
     }
 
     @Override
     public PersonDetails personDetails(long tmdbId, String language) {
-        requireConfiguration();
-        var response = client.get().uri(uri -> uri.path("/person/{tmdbId}").queryParam("language", language)
+        var configuration = requireConfiguration();
+        var response = client(configuration).get().uri(uri -> uri.path("/person/{tmdbId}").queryParam("language", language)
                 .queryParam("append_to_response", "movie_credits").build(tmdbId))
-                .header(HttpHeaders.AUTHORIZATION, "Bearer " + properties.apiToken()).retrieve().body(TmdbPersonDetails.class);
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + configuration.apiToken()).retrieve().body(TmdbPersonDetails.class);
         if (response == null) throw new IllegalStateException("TMDB não retornou dados para a pessoa solicitada.");
         return response.toDomain();
     }
 
     @Override
-    public List<Series> trendingSeries(String language, int page) {
-        requireConfiguration();
-        var response = client.get().uri(uri -> uri.path("/trending/tv/week").queryParam("language", language)
-                .queryParam("page", page).build()).header(HttpHeaders.AUTHORIZATION, "Bearer " + properties.apiToken())
+    public CatalogPage<Series> trendingSeries(String language, int page, CatalogSort sort) {
+        var configuration = requireConfiguration();
+        return cache.get(cache.key(configuration, "trending-series", language, page, sort), cache.catalogTtl(), () -> {
+        var response = client(configuration).get().uri(uri -> uri.path("/trending/tv/week").queryParam("language", language)
+                .queryParam("page", page).build()).header(HttpHeaders.AUTHORIZATION, "Bearer " + configuration.apiToken())
                 .retrieve().body(TmdbSeriesPage.class);
-        return response == null || response.results() == null ? List.of() : response.results().stream().map(TmdbSeries::toDomain).toList();
+        return map(response);
+        });
     }
 
     @Override
-    public List<Series> searchSeries(String query, String language, int page) {
-        requireConfiguration();
-        var response = client.get().uri(uri -> uri.path("/search/tv").queryParam("query", query)
+    public CatalogPage<Series> searchSeries(String query, String language, int page, CatalogSort sort) {
+        var configuration = requireConfiguration();
+        return cache.get(cache.key(configuration, "search-series", query, language, page, sort), cache.searchTtl(), () -> {
+        var response = client(configuration).get().uri(uri -> uri.path("/search/tv").queryParam("query", query)
                 .queryParam("language", language).queryParam("page", page).queryParam("include_adult", false).build())
-                .header(HttpHeaders.AUTHORIZATION, "Bearer " + properties.apiToken()).retrieve().body(TmdbSeriesPage.class);
-        return response == null || response.results() == null ? List.of() : response.results().stream().map(TmdbSeries::toDomain).toList();
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + configuration.apiToken()).retrieve().body(TmdbSeriesPage.class);
+        return map(response);
+        });
+    }
+
+    @Override
+    public List<Series> recommendedSeries(long tmdbId, String language) {
+        var configuration = requireConfiguration();
+        return cache.get(cache.key(configuration, "series-recommendations", tmdbId, language), Duration.ofMinutes(30), () -> {
+            var response = client(configuration).get().uri(uri -> uri.path("/tv/{tmdbId}/recommendations")
+                    .queryParam("language", language).build(tmdbId))
+                    .header(HttpHeaders.AUTHORIZATION, "Bearer " + configuration.apiToken()).retrieve().body(TmdbSeriesPage.class);
+            return map(response).items().stream().limit(8).toList();
+        });
     }
 
     @Override
     public SeriesDetails seriesDetails(long tmdbId, String language) {
-        requireConfiguration();
-        var response = client.get().uri(uri -> uri.path("/tv/{tmdbId}").queryParam("language", language)
+        var configuration = requireConfiguration();
+        return cache.get(cache.key(configuration, "series-details", tmdbId, language), Duration.ofMinutes(30), () -> {
+        var response = client(configuration).get().uri(uri -> uri.path("/tv/{tmdbId}").queryParam("language", language)
                 .queryParam("append_to_response", "credits,videos").build(tmdbId))
-                .header(HttpHeaders.AUTHORIZATION, "Bearer " + properties.apiToken()).retrieve().body(TmdbSeriesDetails.class);
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + configuration.apiToken()).retrieve().body(TmdbSeriesDetails.class);
         if (response == null) throw new IllegalStateException("TMDB não retornou detalhes para a série solicitada.");
         return response.toDomain();
+        });
     }
 
     @Override
     public SeasonDetails seasonDetails(long seriesTmdbId, int seasonNumber, String language) {
-        requireConfiguration();
-        var response = client.get().uri(uri -> uri.path("/tv/{seriesTmdbId}/season/{seasonNumber}")
+        var configuration = requireConfiguration();
+        var response = client(configuration).get().uri(uri -> uri.path("/tv/{seriesTmdbId}/season/{seasonNumber}")
                 .queryParam("language", language).build(seriesTmdbId, seasonNumber))
-                .header(HttpHeaders.AUTHORIZATION, "Bearer " + properties.apiToken()).retrieve().body(TmdbSeasonDetails.class);
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + configuration.apiToken()).retrieve().body(TmdbSeasonDetails.class);
         if (response == null) throw new IllegalStateException("TMDB não retornou episódios para a temporada solicitada.");
         return response.toDomain();
     }
 
-    private void requireConfiguration() {
-        if (!properties.configured()) {
-            throw new TmdbNotConfiguredException();
+    private TmdbProperties requireConfiguration() {
+        var configuration = properties;
+        if (settings != null) {
+            var effective = settings.effective("tmdb");
+            configuration = new TmdbProperties(effective.baseUrl(), effective.secret());
         }
+        if (!configuration.configured()) throw new TmdbNotConfiguredException();
+        return configuration;
     }
 
-    private static List<Movie> map(TmdbMoviePage page) {
-        if (page == null || page.results() == null) {
-            return List.of();
-        }
-        return page.results().stream().map(TmdbMovie::toDomain).toList();
+    private RestClient client(TmdbProperties configuration) {
+        return RestClient.builder().baseUrl(configuration.baseUrl()).build();
+    }
+
+    private static CatalogPage<Movie> map(TmdbMoviePage page) {
+        if (page == null) return new CatalogPage<>(List.of(), 1, 1, 0);
+        var items = page.results() == null ? List.<Movie>of() : page.results().stream().map(TmdbMovie::toDomain).toList();
+        return new CatalogPage<>(items, page.page(), page.totalPages(), page.totalResults());
+    }
+
+    private static CatalogPage<Series> map(TmdbSeriesPage page) {
+        if (page == null) return new CatalogPage<>(List.of(), 1, 1, 0);
+        var items = page.results() == null ? List.<Series>of() : page.results().stream().map(TmdbSeries::toDomain).toList();
+        return new CatalogPage<>(items, page.page(), page.totalPages(), page.totalResults());
     }
 
     private static LocalDate parseDate(String value) {
@@ -196,7 +271,7 @@ public class TmdbMovieAdapter implements MovieMetadataProvider {
         }
     }
 
-    private record TmdbMoviePage(List<TmdbMovie> results) {
+    private record TmdbMoviePage(int page, @JsonProperty("total_pages") int totalPages, @JsonProperty("total_results") long totalResults, List<TmdbMovie> results) {
     }
 
     private record TmdbMovie(
@@ -311,7 +386,7 @@ public class TmdbMovieAdapter implements MovieMetadataProvider {
     private record TmdbMovieCredits(List<TmdbMovie> cast, List<TmdbMovie> crew) {
     }
 
-    private record TmdbSeriesPage(List<TmdbSeries> results) {
+    private record TmdbSeriesPage(int page, @JsonProperty("total_pages") int totalPages, @JsonProperty("total_results") long totalResults, List<TmdbSeries> results) {
     }
 
     private record TmdbSeries(long id, String name, @JsonProperty("original_name") String originalName,
