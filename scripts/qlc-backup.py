@@ -6,6 +6,7 @@ import argparse
 import base64
 from datetime import datetime, timezone
 import hashlib
+import importlib.util
 import json
 import os
 from pathlib import Path, PurePosixPath
@@ -22,6 +23,20 @@ HELPER = 'qlcstream-backup-helper:1'
 SERVICES = ('database', 'backend', 'frontend', 'prowlarr', 'qbittorrent')
 MOUNTS = {'prowlarr': ('prowlarr', '/config'), 'qbittorrent': ('qbittorrent', '/config'),
           'keys': ('backend', '/run/qlcstream-secrets'), 'media': ('backend', '/data')}
+SEMVER_RE = re.compile(r'^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$')
+
+
+def _load_release_module():
+    path = Path(__file__).resolve().with_name('qlc-release.py')
+    spec = importlib.util.spec_from_file_location('qlc_release_shared', path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError('qlc-release.py is required alongside qlc-backup.py')
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+_RELEASE = _load_release_module()
 
 
 def require(condition, code):
@@ -29,8 +44,8 @@ def require(condition, code):
         raise ValueError(code)
 
 
-def run(*args, data=None, allow_failure=False, environment=None):
-    p = subprocess.run(list(args), input=data, capture_output=True, cwd=ROOT,
+def run(*args, data=None, allow_failure=False, environment=None, cwd=None):
+    p = subprocess.run(list(args), input=data, capture_output=True, cwd=ROOT if cwd is None else cwd,
                        env=None if environment is None else os.environ | environment)
     if p.returncode and not allow_failure:
         # Docker/SQL errors can echo passwords or database contents.
@@ -60,12 +75,57 @@ def exists(kind, name):
     return docker(kind, 'inspect', name, allow_failure=True).returncode == 0
 
 
+def is_runtime_compatibility_path(rel_posix):
+    return _RELEASE.is_runtime_compatibility_path(rel_posix)
+
+
+def load_release_manifest(root=None):
+    base = Path(root) if root is not None else ROOT
+    try:
+        return _RELEASE.verify_directory(base)
+    except ValueError:
+        raise ValueError('MANIFESTO_INVALIDO') from None
+
+
+def source_identity(root=None):
+    base = Path(root) if root is not None else ROOT
+    manifest_path = base / 'RELEASE-MANIFEST.json'
+    if manifest_path.exists() or manifest_path.is_symlink():
+        manifest = load_release_manifest(base)
+        return {'commit': manifest['commit'], 'releaseVersion': manifest['version'],
+                'compatibility': dict(manifest['compatibility']), 'legacyCompatibility': None}
+    require((base / '.git').exists(), 'ORIGEM_NAO_IDENTIFICADA')
+    tracked = [name for name in run('git', 'ls-files', '-z', 'backend', 'frontend', cwd=base).decode().split('\0')
+               if name]
+    # Code identity covers runtime inputs; docs, unit tests and desktop scaffold remain decoupled.
+    runtime_paths = sorted(base / name for name in tracked if is_runtime_compatibility_path(name))
+    compat = {p.relative_to(base).as_posix(): hashlib.sha256(p.read_bytes()).hexdigest()
+              for p in runtime_paths}
+    # Preserve exact compatibility calculation of legacy format-1 backups created before F04.3.
+    legacy_paths = sorted(base / name for name in tracked if '/src/test/' not in name)
+    legacy_compat = {p.relative_to(base).as_posix(): hashlib.sha256(p.read_bytes()).hexdigest()
+                     for p in legacy_paths}
+    commit = run('git', 'rev-parse', 'HEAD', cwd=base).decode().strip()
+    version = None
+    version_file = base / 'VERSION'
+    if version_file.is_file() and not version_file.is_symlink():
+        candidate = version_file.read_text(encoding='utf-8').strip()
+        if SEMVER_RE.fullmatch(candidate):
+            version = candidate
+    return {'commit': commit, 'releaseVersion': version, 'compatibility': compat,
+            'legacyCompatibility': legacy_compat}
+
+
 def compatibility():
-    # Code identity covers runtime inputs; documentation/test-only commits remain compatible.
-    paths = [ROOT / name for name in run('git', 'ls-files', '-z', 'backend', 'frontend').decode().split('\0')
-             if name and '/src/test/' not in name]
-    return {p.relative_to(ROOT).as_posix(): hashlib.sha256(p.read_bytes()).hexdigest()
-            for p in sorted(paths)}
+    return source_identity()['compatibility']
+
+
+def compatibility_request(root=None):
+    identity = source_identity(root)
+    payload = {'compatibility': identity['compatibility']}
+    if identity['legacyCompatibility']:
+        payload['legacyCompatibility'] = identity['legacyCompatibility']
+    return payload
 
 
 def private_command(action, vault, keys, mounts=()):
@@ -260,14 +320,17 @@ def backup(args):
                              'stopTimeout': container['Config'].get('StopTimeout'),
                              'stopSignal': container['Config'].get('StopSignal'),
                              'entrypoint': container['Config']['Entrypoint'], 'command': container['Config']['Cmd']}
+    identity = source_identity()
     manifest = {'format': 1, 'createdUtc': datetime.now(timezone.utc).isoformat(),
-                'commit': run('git', 'rev-parse', 'HEAD').decode().strip(), 'compatibility': compatibility(),
+                'commit': identity['commit'], 'compatibility': identity['compatibility'],
                 'images': images, 'services': services, 'snapshot': snapshot,
                 'settings': snapshot['integration_settings'], 'flyway': snapshot['flyway_schema_history'],
                 'mediaIncluded': args.include_media,
                 'excluded': ['cluster roles/ACL/tablespaces', 'other databases', 'host .env and scripts',
                              'image layers and source checkout', 'external services/accounts'] +
                             ([] if args.include_media else ['all media file bytes; directories only'])}
+    if identity['releaseVersion']:
+        manifest['releaseVersion'] = identity['releaseVersion']
     claim(args.vault)
     reserve(args.vault, 'package-v1')
     reserve(args.key_vault, 'key-v1')
@@ -279,7 +342,7 @@ def backup(args):
 def metadata(args):
     require(exists('volume', args.vault), 'BACKUP_AUSENTE')
     require(args.key_vault and exists('volume', args.key_vault), 'CHAVE_AUSENTE')
-    m = json.loads(private('metadata', args.vault, args.key_vault, {'compatibility': compatibility()}))
+    m = json.loads(private('metadata', args.vault, args.key_vault, compatibility_request()))
     require(set(m['services']) == set(SERVICES), 'BACKUP_INCOMPLETO')
     for config in m['services'].values():
         stop_options(config)
@@ -304,7 +367,7 @@ def restore(args):
         reserve(volumes[name], 'restore-incomplete')
     docker('network', 'create', '--internal', '--label', 'qlcstream.backup=restore', network)
     mounts = [(volumes[name], '/target/' + name, False, 'volume') for name in MOUNTS]
-    private('extract', args.vault, args.key_vault, {'compatibility': compatibility()}, mounts)
+    private('extract', args.vault, args.key_vault, compatibility_request(), mounts)
     targets = {'database': [(volumes['database'], '/var/lib/postgresql')],
                'backend': [(volumes['keys'], '/run/qlcstream-secrets'), (volumes['media'], '/data')],
                'frontend': [], 'prowlarr': [(volumes['prowlarr'], '/config')],
@@ -355,7 +418,7 @@ def restore(args):
                 break
             time.sleep(1)
         require(ready, 'BANCO_NAO_PRONTO')
-        dump = private('dump', args.vault, args.key_vault, {'compatibility': compatibility()})
+        dump = private('dump', args.vault, args.key_vault, compatibility_request())
         docker('exec', '-i', db, 'pg_restore', '--exit-on-error', '--single-transaction', '--no-owner', '--no-acl',
                '-U', env['POSTGRES_USER'], '-d', env['POSTGRES_DB'], data=dump)
         observed = database_snapshot(inspect('container', db))
